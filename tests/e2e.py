@@ -1,7 +1,7 @@
 """Playwright end-to-end checks for Reel Pick at desktop (1440x900), iPhone (440x956) and iPhone home-screen standalone emulation.
 Usage: python3 tests/e2e.py [base_url]   (default http://localhost:47391/)
 Writes screenshots to screenshots/ and prints a JSON summary. Exit code 1 on any failed check."""
-import asyncio, json, sys, os, time
+import asyncio, json, sys, os, time, re
 from datetime import datetime, timedelta, timezone
 from playwright.async_api import async_playwright
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:47391/"
@@ -10,6 +10,14 @@ os.makedirs(OUT, exist_ok=True)
 results = []
 def check(name, ok, detail=""):
     results.append({"check": name, "ok": bool(ok), "detail": str(detail)[:200]}); print(("PASS " if ok else "FAIL ") + name, detail if not ok else "")
+
+PLEX_RE = re.compile(r"^https://([a-z0-9-]+\.)*plex\.(tv|direct)(:\d+)?/")
+async def no_real_plex(ctx):
+    """These suites run signed out; Settings pre-creates a sign-in PIN, so answer plex.tv locally instead of hitting it."""
+    async def h(route):
+        if route.request.method == "OPTIONS": return await route.fulfill(status=204, headers={"access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*"})
+        await route.fulfill(status=201, headers={"access-control-allow-origin": "*", "content-type": "application/json"}, body=json.dumps({"id": 1, "code": "TESTPIN", "expiresIn": 1800}))
+    await ctx.route(PLEX_RE, h)
 
 async def posters_loaded(pg, sel):
     return await pg.evaluate("""s=>{const im=[...document.querySelectorAll(s+' .poster img')].filter(i=>i.getBoundingClientRect().top<innerHeight*1.5);
@@ -22,6 +30,7 @@ GENRES_OF = "sel=>[...document.querySelectorAll(sel)].map(e=>e.closest('[data-id
 
 async def run(p, label, vp, mobile):
     ctx = await p.new_context(viewport=vp, device_scale_factor=2 if mobile else 1, is_mobile=mobile, has_touch=mobile)
+    await no_real_plex(ctx)
     pg = await ctx.new_page(); errs = []; tmdb_calls = []
     pg.on("console", lambda m: errs.append(f"{m.type}: {m.text}") if m.type == "error" else None)
     pg.on("pageerror", lambda e: errs.append(f"pageerror: {e}"))
@@ -122,14 +131,8 @@ async def run(p, label, vp, mobile):
     check(f"{label}: TMDB endpoints used", len(set(tmdb_calls)) >= 4, sorted(set(c.replace("https://api.themoviedb.org/3", "") for c in tmdb_calls if "/movie/" not in c)) + ["/movie/{id}"])
     await ctx.close()
 
-STANDALONE_CSS = """:root{--top:62px!important;--bot:34px!important}
-#__sb{position:fixed;left:0;right:0;top:0;height:62px;z-index:2147483647;background:rgba(255,0,128,.18);pointer-events:auto}
-#__sb i{position:absolute;left:50%;top:11px;width:126px;height:37px;margin-left:-63px;border-radius:20px;background:#000}
-#__hi{position:fixed;left:0;right:0;bottom:0;height:34px;z-index:2147483647;background:rgba(255,0,128,.12);pointer-events:auto}
-#__hi i{position:absolute;left:50%;bottom:8px;width:140px;height:5px;margin-left:-70px;border-radius:3px;background:#fff}"""
-INSET_JS = "(css)=>{const add=()=>{if(document.getElementById('__sb'))return;const s=document.createElement('style');s.textContent=css;document.head.appendChild(s);" \
-           "for(const id of ['__sb','__hi']){const d=document.createElement('div');d.id=id;d.innerHTML='<i></i>';document.body.appendChild(d);}};" \
-           "document.readyState==='loading'?document.addEventListener('DOMContentLoaded',add):add();}"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from e2e_insets import STANDALONE_CSS, INSET_JS
 AUDIT_JS = """()=>[...document.querySelectorAll('button,a,[role=button]')].filter(b=>{const r=b.getBoundingClientRect();if(!r.width||!r.height)return false;
   const m=document.getElementById('modal');if(!m.hidden&&!m.contains(b))return false;
   const fp=document.querySelector('.filters.panel.open');if(fp&&!fp.contains(b))return false;
@@ -143,7 +146,7 @@ async def standalone(p):
     opaque, tap-swallowing overlays where the status bar/Dynamic Island and home indicator sit."""
     label = "standalone"
     ctx = await p.new_context(viewport={"width": 440, "height": 956}, device_scale_factor=3, is_mobile=True, has_touch=True)
-    await ctx.add_init_script(f"({INSET_JS})({json.dumps(STANDALONE_CSS)})")
+    await ctx.add_init_script(f"({INSET_JS})({json.dumps(STANDALONE_CSS)})"); await no_real_plex(ctx)
     pg = await ctx.new_page(); errs = []
     pg.on("pageerror", lambda e: errs.append(f"pageerror: {e}"))
     pg.on("console", lambda m: errs.append(f"{m.type}: {m.text}") if m.type == "error" else None)

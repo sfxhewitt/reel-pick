@@ -350,3 +350,21 @@ body.sheet-open{overflow:hidden}body.sheet-open .fab{display:none}
 @media (min-width:900px){ .modal{padding-top:calc(16px + var(--top));padding-bottom:calc(16px + var(--bot))} }
 @media (max-width:899px){ .sheet-bar{padding-top:calc(6px + var(--top))} }
 .dv-main,.dv-side{min-width:0}
+/* ---------- Plex ---------- */
+:root{--plex:#e5a00d}
+.badge.onplex{color:#000;background:var(--plex);border-color:var(--plex);box-shadow:0 0 10px rgba(229,160,13,.35)}
+.badge.onplex.sm{height:17px;padding:0 5px;font-size:8.5px}
+.starbtn.plexwl.on{color:var(--plex);background:rgba(229,160,13,.16);filter:drop-shadow(0 0 6px rgba(229,160,13,.6))}
+.card.mini .tools{flex-direction:column}
+.btn.plexwl,.btn.plexplay,.plexsign{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn.plexwl svg,.btn.plexplay svg,.plexsign svg,.plexbar-l svg{width:14px;height:14px;fill:currentColor;stroke:none}
+.btn.plexwl.on{color:#000;background:var(--plex);border-color:var(--plex)}
+.btn.plexplay{color:var(--plex);border-color:rgba(229,160,13,.6)}
+.plexsign{background:var(--plex)!important;color:#000!important}
+.plexbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}
+.plexbar-l{display:inline-flex;align-items:center;gap:6px;font:700 10.5px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--plex)}
+.plexbar-l .muted{letter-spacing:.04em;text-transform:none;font-weight:400}
+.plexf .chip[aria-pressed=true]{color:#000;background:var(--plex);border-color:var(--plex)}
+.plexbar .chip{min-height:36px;padding:0 12px}
+.dv-link.plexconnect{display:block;width:100%;text-align:left;cursor:pointer;color:var(--plex);background:none;border:0;padding:0;min-height:44px;font:700 10.5px var(--mono);letter-spacing:.14em;text-transform:uppercase}
+.plexpanel{border-color:rgba(229,160,13,.35)}

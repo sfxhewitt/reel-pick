@@ -172,7 +172,7 @@
  {
   "check": "iphone: picker never repeats + skips logged + not-interested bans",
   "ok": true,
-  "detail": "[['tmdb-73', 'cooldown', 1], ['tmdb-68718', 'cooldown', 1], ['tmdb-489', 'cooldown', 1], ['tmdb-207', 'banned', 0]]"
+  "detail": "[['tmdb-73', 'cooldown', 1], ['tmdb-489', 'cooldown', 1], ['tmdb-68718', 'cooldown', 1], ['tmdb-207', 'banned', 0]]"
  },
  {
   "check": "iphone: no TMDB watch-provider requests",
@@ -272,7 +272,7 @@
  {
   "check": "standalone: [surprise detail] every close/X control is below the inset, 44px+, and not covered",
   "ok": true,
-  "detail": "[{'id': 'sheetClose', 'text': 'Close', 'top': 73, 'w': 76, 'h': 44, 'hit': True}]"
+  "detail": "[{'id': 'sheetClose', 'text': 'Close', 'top': 74, 'w': 76, 'h': 44, 'hit': True}]"
  },
  {
   "check": "standalone: exclusions are hard filters in Tonight, Browse and Surprise",

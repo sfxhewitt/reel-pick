@@ -30,6 +30,8 @@ const store = Object.assign({ fav:[], watch:[], seen:[], tmdbKey:'', snap:{}, fb
 delete store.services; if (!store.genrePrefs) store.genrePrefs = { exclude:[], require:[] };
 const save = () => { try { if (store.fb.length > 400) store.fb = store.fb.slice(-400); localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch {} updateSavedCount(); };
 const rules = window.ReelRules.create();
+const P = window.PlexClient.create();
+if (!['all', 'only', 'hide'].includes(store.plexFilter)) store.plexFilter = 'all';
 const has = (list, id) => store[list].includes(id);
 
 /* ---------------- data ---------------- */
@@ -108,7 +110,13 @@ function genreOK(f){
   if (gp.require.length && !f.g.some(g => gp.require.includes(g))) return false;
   return true;
 }
-const gpKey = () => store.genrePrefs.exclude.join(',') + '|' + store.genrePrefs.require.join(',');
+/* Plex "on my server" filter (all / only / hide); ignored until the library has been read. */
+function plexOK(f){
+  if (store.plexFilter === 'all' || !P.libraryReady) return true;
+  const own = !!P.owned(f); return store.plexFilter === 'only' ? own : !own;
+}
+const prefOK = f => genreOK(f) && plexOK(f);
+const gpKey = () => store.genrePrefs.exclude.join(',') + '|' + store.genrePrefs.require.join(',') + '|plex:' + (P.libraryReady ? store.plexFilter : 'all');
 function allGenres(){ return [...new Set(FILMS.flatMap(f => f.g))].sort(); }
 /* state: 0 neutral, 1 exclude, 2 require */
 function genreState(g){ const gp = store.genrePrefs; return gp.exclude.includes(g) ? 1 : gp.require.includes(g) ? 2 : 0; }
@@ -139,7 +147,7 @@ function genreControl(el, onChange){
 function baseCtx(extra = {}){ return Object.assign({ bayes:BAYES, profile:PROFILE }, extra); }
 function candidates({ runtime = null, avoid = null, minVotes = 0, filter = null, allowCooldown = false } = {}){
   return FILMS.filter(f => !has('seen', f.id) && (allowCooldown ? !rules.banInfo(f.id) && !rules.session.has(f.id) : rules.eligible(f.id))
-    && genreOK(f)
+    && prefOK(f)
     && (!runtime || [...runtime].some(k => RUNTIMES[k].test(f.r)))
     && (!avoid || avoid(f) === false) && (f.votes || 0) >= minVotes && (!filter || filter(f)));
 }
@@ -154,15 +162,24 @@ function posterHTML(f){
 function moodBadges(f){ return (f.m || []).slice(0, 2).map(k => `<span class="badge mtag" style="--mc:${MOOD_COL[R.MOODS[k].c]}">${R.MOODS[k].label}</span>`).join(''); }
 const HEART = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-9.2-9C1.4 7.9 3.4 4.5 6.8 4.5c2 0 3.4 1.1 4.2 2.4h2c.8-1.3 2.2-2.4 4.2-2.4 3.4 0 5.4 3.4 4 6.5C19 15.6 12 20 12 20z"/></svg>';
 const PIN = '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
+const PLEXI = '<svg viewBox="0 0 24 24"><path d="M8 3h5l6 9-6 9H8l6-9z"/></svg>';
+function plexBadge(f, big = false){ const o = P.owned(f); return o ? `<span class="badge onplex${big ? '' : ' sm'}" title="On ${esc(o.server || 'your Plex server')}">On Plex</span>` : ''; }
+function plexWlBtn(f, cls = 'starbtn'){
+  if (!P.signedIn || !f.tmdb) return '';
+  const on = P.onWatchlist(f.tmdb);
+  return cls === 'starbtn'
+    ? `<button class="starbtn plexwl ${on ? 'on' : ''}" data-act="plexwl" aria-pressed="${on}" aria-label="${on ? 'Remove from Plex watchlist' : 'Add to Plex watchlist'}" title="${on ? 'On your Plex watchlist' : 'Add to Plex watchlist'}">${PLEXI}</button>`
+    : `<button class="btn plexwl ${on ? 'on' : ''}" data-act="plexwl" aria-pressed="${on}">${PLEXI}<span>${on ? 'On Plex watchlist' : 'Add to Plex watchlist'}</span></button>`;
+}
 function cardHTML(f, rr, { mini = false, ctx = null, match = false, maxScore = 1 } = {}){
   const pct = match && rr ? Math.max(40, Math.min(99, Math.round(55 + 44 * rr.score / Math.max(maxScore, .01)))) : 0;
   const col = f.m && f.m[0] ? MOOD_COL[R.MOODS[f.m[0]].c] : 'var(--water)';
   return `<article class="card deal ${mini ? 'mini' : ''}" data-id="${esc(f.id)}" style="--c:${col}">
     ${pct ? `<span class="matchpill">${pct}% match</span>` : ''}
-    <div class="tools"><button class="starbtn ${has('fav', f.id) ? 'on fav' : ''}" data-act="fav" aria-label="Favourite" title="Favourite">${HEART}</button><button class="starbtn ${has('watch', f.id) ? 'on' : ''}" data-act="watch" aria-label="Watchlist" title="Watchlist">${PIN}</button></div>
+    <div class="tools"><button class="starbtn ${has('fav', f.id) ? 'on fav' : ''}" data-act="fav" aria-label="Favourite" title="Favourite">${HEART}</button><button class="starbtn ${has('watch', f.id) ? 'on' : ''}" data-act="watch" aria-label="Watchlist" title="Watchlist">${PIN}</button>${plexWlBtn(f)}</div>
     <div data-open>${posterHTML(f)}</div>
     <div class="body"><h4 class="t" data-open>${esc(f.t)}</h4>
-      <div class="meta"><span class="star" title="Bayesian weighted rating (TMDB ${f.i.toFixed(1)} from ${R.fmtVotes(f.votes)} votes)">★ ${(f.wr ?? f.i).toFixed(1)}</span><span>${f.y || ''}</span><span data-run="${esc(f.id)}">${fmtRun(f.r)}</span>${f.src === 'live' ? '<span class="badge live">TMDB</span>' : ''}</div>
+      <div class="meta"><span class="star" title="Bayesian weighted rating (TMDB ${f.i.toFixed(1)} from ${R.fmtVotes(f.votes)} votes)">★ ${(f.wr ?? f.i).toFixed(1)}</span><span>${f.y || ''}</span><span data-run="${esc(f.id)}">${fmtRun(f.r)}</span>${f.src === 'live' ? '<span class="badge live">TMDB</span>' : ''}${plexBadge(f)}</div>
       ${mini ? '' : `<div class="tags">${moodBadges(f)}${f.g.slice(0, 2).map(g => `<span class="badge">${esc(g)}</span>`).join('')}</div>
       ${f.d ? `<p class="syn">${esc(f.d)}</p>` : ''}
       ${rr && ctx ? `<div class="reason">${esc(R.why(rr, ctx))}</div>` : ''}`}
@@ -185,11 +202,14 @@ document.addEventListener('click', e => {
     else if (a === 'like' || a === 'dislike') { feedback(fbOf(id) === a ? 'clear' : a, id); refreshAll(); }
     else if (a === 'notint') { feedback('notint', id); if (picker && picker.cur && picker.cur.f.id === id) nextPick(false); else { closeModal(); refreshAll(); } }
     else if (a === 'unban') { rules.unban(id); toast('Unhidden'); renderSaved(); }
+    else if (a === 'plexwl') togglePlexWL(id, act);
     return; } }
   const open = e.target.closest('[data-open]');
   if (open) { const card = open.closest('[data-id]'); if (card) openDetail(card.dataset.id); }
   if (e.target.closest('[data-close]')) closeModal();
   const go = e.target.closest('[data-goto]'); if (go) switchView(go.dataset.goto);
+  if (e.target.closest('[data-plexsettings]')) { closeModal(); setTimeout(() => $('#settingsBtn').click(), 0); }
+  const pf = e.target.closest('[data-pf]'); if (pf) setPlexFilter(pf.dataset.pf);
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); $('#filters').classList.remove('open'); } });
 
@@ -230,7 +250,7 @@ document.addEventListener('keydown', e => {
 const DIM_BARS = [['V','Valence','bleak','uplifting'],['A','Intensity','calm','intense'],['dark','Darkness'],['humour','Humour'],['complex','Complexity'],['pace','Pace'],['weight','Tearjerker'],['comfort','Comfort']];
 function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
   const x = f.extra || {}; const q = encodeURIComponent(f.t + ' ' + (f.y || ''));
-  const onW = has('watch', f.id), onF = has('fav', f.id), onS = has('seen', f.id), fb = fbOf(f.id);
+  const onW = has('watch', f.id), onF = has('fav', f.id), onS = has('seen', f.id), fb = fbOf(f.id), own = P.owned(f);
   const trailer = x.trailer || `https://www.youtube.com/results?search_query=${q}+trailer`;
   rr = rr || R.relevance(f, ctx || baseCtx());
   const cast = x.cast && x.cast.length ? `<section class="dv-sec"><h4>Cast</h4><ul class="dv-cast">${x.cast.map(c => `<li><span class="dv-av">${c.p ? `<img src="${esc(c.p)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(c.n.split(/\s+/).map(w=>w[0]).slice(0,2).join(''))}</i></span><b>${esc(c.n)}</b><small>${esc(c.c || '')}</small></li>`).join('')}</ul></section>` : '';
@@ -240,11 +260,12 @@ function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
     <div class="dv-hero"><div class="dv-backdrop">${f.backdrop ? `<img src="${esc(f.backdrop)}" alt="" onerror="this.remove()">` : ''}</div><div class="dv-shade"></div>
       <div class="dv-head"><div class="dv-poster">${posterHTML(f)}</div><div class="dv-titles">
         ${title ? `<div class="dv-eyebrow">${esc(title)}</div>` : ''}<h2 id="dvTitle">${esc(f.t)}</h2>${x.tagline ? `<p class="dv-tagline">${esc(x.tagline)}</p>` : ''}
-        <div class="meta dv-meta"><span class="badge ok" title="Bayesian weighted rating">★ ${(f.wr ?? f.i).toFixed(1)} weighted</span><span class="badge">TMDB ${f.i.toFixed(1)} · ${R.fmtVotes(f.votes)} votes</span>${f.y ? `<span class="badge">${f.y}</span>` : ''}${f.r ? `<span class="badge" data-run="${esc(f.id)}">${fmtRun(f.r)}</span>` : ''}${f.cert ? `<span class="badge">${esc(f.cert)}</span>` : ''}${f.g.map(g => `<span class="badge">${esc(g)}</span>`).join('')}</div>
+        <div class="meta dv-meta"><span class="badge ok" title="Bayesian weighted rating">★ ${(f.wr ?? f.i).toFixed(1)} weighted</span><span class="badge">TMDB ${f.i.toFixed(1)} · ${R.fmtVotes(f.votes)} votes</span>${f.y ? `<span class="badge">${f.y}</span>` : ''}${f.r ? `<span class="badge" data-run="${esc(f.id)}">${fmtRun(f.r)}</span>` : ''}${f.cert ? `<span class="badge">${esc(f.cert)}</span>` : ''}${f.g.map(g => `<span class="badge">${esc(g)}</span>`).join('')}${plexBadge(f, true)}</div>
         <div class="dv-actions">
           <a class="buy" target="_blank" rel="noopener" href="${esc(trailer)}">Trailer ${ico('ext')}</a>
           ${again ? `<button class="btn primary" id="againBtn">${ico('dice')} Pick another</button>` : ''}
           <button class="btn ${onW ? 'on' : ''}" data-act="watch" aria-pressed="${onW}">${onW ? 'On watchlist' : 'Watchlist'}</button>
+          ${plexWlBtn(f, 'btn')}${own ? `<a class="btn plexplay" target="_blank" rel="noopener" href="${esc(own.play)}">${PLEXI}<span>Play on Plex</span></a>` : ''}
           <div class="dv-fb">
             <button class="iconbtn ${fb === 'like' ? 'on' : ''}" data-act="like" aria-pressed="${fb === 'like'}" aria-label="Like" title="Like: more like this">▲</button>
             <button class="iconbtn ${fb === 'dislike' ? 'on bad' : ''}" data-act="dislike" aria-pressed="${fb === 'dislike'}" aria-label="Dislike" title="Dislike: less like this">▼</button>
@@ -263,7 +284,8 @@ function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
       <aside class="dv-side"><section class="dv-sec panel dv-more"><h4>More</h4>
           <a class="dv-link" target="_blank" rel="noopener" href="${f.imdb ? 'https://www.imdb.com/title/' + esc(f.imdb) + '/' : 'https://www.imdb.com/find/?q=' + q}">IMDb ${ico('ext')}</a>
           <a class="dv-link" target="_blank" rel="noopener" href="${f.tmdb ? 'https://www.themoviedb.org/movie/' + f.tmdb : 'https://www.themoviedb.org/search?query=' + q}">TMDB ${ico('ext')}</a>
-          <a class="dv-link" target="_blank" rel="noopener" href="https://letterboxd.com/search/${encodeURIComponent(f.t)}/">Letterboxd ${ico('ext')}</a></section>
+          <a class="dv-link" target="_blank" rel="noopener" href="https://letterboxd.com/search/${encodeURIComponent(f.t)}/">Letterboxd ${ico('ext')}</a>
+          ${P.signedIn ? '' : '<button class="dv-link plexconnect" data-plexsettings>Connect Plex: watchlist & “on my server” →</button>'}</section>
       </aside></div></article>`;
 }
 function showDetail(f, rr = null, title = '', again = null, ctx = null, keepScroll = false){
@@ -307,7 +329,7 @@ function renderHero(reroll = false){
   if (!FILMS.length) return;
   const { ctx, runtime, wk } = tonightCtx(); let rr = null;
   if (reroll && store.hero) { feedback('skip', store.hero.id); store.hero = null; }
-  if (store.hero && store.hero.date === today()) { const f = getM(store.hero.id); if (f && !has('seen', f.id) && !rules.banInfo(f.id) && genreOK(f)) rr = R.relevance(f, ctx); }
+  if (store.hero && store.hero.date === today()) { const f = getM(store.hero.id); if (f && !has('seen', f.id) && !rules.banInfo(f.id) && prefOK(f)) rr = R.relevance(f, ctx); }
   if (!rr) {
     let c = candidates({ runtime, minVotes: 1500 }); if (c.length < 5) c = candidates({ runtime });
     const top = suggest(c, ctx, 8, .7); if (!top.length) { $('#hero').innerHTML = '<div class="empty">Everything is on cooldown. Clear cooldowns in Settings.</div>'; return; }
@@ -342,7 +364,7 @@ function renderQuickMoods(){
 function renderTonightRow(){
   if (!FILMS.length) return;
   const ctx = baseCtx({ prefer: 'classic' }); let list = null;
-  if (store.row && store.row.date === today() && store.row.gp === gpKey()) list = store.row.ids.map(getM).filter(f => f && !has('seen', f.id) && !rules.banInfo(f.id) && genreOK(f)).map(f => R.relevance(f, ctx));
+  if (store.row && store.row.date === today() && store.row.gp === gpKey()) list = store.row.ids.map(getM).filter(f => f && !has('seen', f.id) && !rules.banInfo(f.id) && prefOK(f)).map(f => R.relevance(f, ctx));
   if (!list || list.length < 6) {
     list = suggest(candidates({ minVotes: 3000 }), ctx, 14, .65);
     rules.markShown(list.map(r => r.f.id)); store.row = { date: today(), gp: gpKey(), ids: list.map(r => r.f.id) }; save();
@@ -408,7 +430,7 @@ function catFilter(f){
   if (F.minRating && f.wr < F.minRating) return false;
   for (const k of F.flags) if (!FLAGS[k].test(f)) return false;
   for (const [k, t] of Object.entries(F.dims)) if (Math.abs((f.dims[k] ?? .5) - t) > .25) return false;
-  return genreOK(f);
+  return prefOK(f);
 }
 function renderBrowse(){
   if (!FILMS.length) return;
@@ -437,7 +459,7 @@ async function liveSearch(q){
   const tok = ++B.token;
   try {
     const res = await T.search(q, 1); if (tok !== B.token) return;
-    const extra = res.items.filter(m => !BY_ID.has(m.id) || BY_ID.get(m.id).src === 'live').map(liveFilm).filter(f => !rules.banInfo(f.id) && genreOK(f));
+    const extra = res.items.filter(m => !BY_ID.has(m.id) || BY_ID.get(m.id).src === 'live').map(liveFilm).filter(f => !rules.banInfo(f.id) && prefOK(f));
     if (!extra.length) return;
     const ctx = B.ctx;
     $('#liveMore').innerHTML = `<h2 class="h2">More from TMDB <span class="muted">live search · ${res.total.toLocaleString('en-GB')} results</span></h2><div class="grid">${extra.map(f => cardHTML(f, R.relevance(f, ctx), { ctx })).join('')}</div>`;
@@ -453,7 +475,7 @@ async function loadLive(reset){
     if (tok !== B.token) return;
     L.page += F.q ? 1 : 2; L.pages = res.pages; L.total = res.total;
     const ids = new Set(L.items.map(f => f.id));
-    L.items.push(...res.items.map(liveFilm).filter(f => !ids.has(f.id) && !rules.banInfo(f.id) && genreOK(f) && !(F.hideSeen && has('seen', f.id))));
+    L.items.push(...res.items.map(liveFilm).filter(f => !ids.has(f.id) && !rules.banInfo(f.id) && prefOK(f) && !(F.hideSeen && has('seen', f.id))));
     const ctx = B.ctx = browseCtx();
     $('#resultCount').textContent = `${L.total.toLocaleString('en-GB')} films · live TMDB${F.q ? ' search' : ''}`;
     $('#results').innerHTML = L.items.length ? L.items.map(f => cardHTML(f, R.relevance(f, ctx), { ctx })).join('') : '<div class="empty">TMDB has nothing for that combination.</div>';
@@ -568,10 +590,112 @@ function updateSavedCount(){ const n = store.watch.length, el = $('#savedCount')
 $('#fab').onclick = () => {
   const v = curView;
   if (v === 'browse') { if (!B.list.length) { toast('Nothing to pick from: loosen a filter'); return; } const pool = B.list.filter(r => rules.eligible(r.f.id)); if (!pool.length) { toast('Nothing new matches. Loosen a filter, or clear cooldowns in Settings'); return; } openPicker(R.mmr(pool, 20, .7, 80), 'Surprise me', B.ctx); }
-  else if (v === 'saved') { const ctx = baseCtx(); const list = store[savedList === 'fav' ? 'fav' : 'watch'].map(getM).filter(f => f && !has('seen', f.id) && genreOK(f)).map(f => R.relevance(f, ctx)).sort((a, b) => b.score - a.score);
+  else if (v === 'saved') { const ctx = baseCtx(); const list = store[savedList === 'fav' ? 'fav' : 'watch'].map(getM).filter(f => f && !has('seen', f.id) && prefOK(f)).map(f => R.relevance(f, ctx)).sort((a, b) => b.score - a.score);
     openPicker(list, 'From your ' + (savedList === 'fav' ? 'favourites' : 'watchlist'), ctx); }
   else { $('#quickMoods [data-mood="*"]').click(); }
 };
+
+
+/* ---------------- PLEX ---------------- */
+const ago = t => { const m = Math.round((Date.now() - t) / 60e3); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 48 * 60 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + ' days ago'; };
+const PF = { all:'All films', only:'Only on my Plex', hide:'Hide ones I own' };
+function plexFilterHTML(){ return `<div class="chips wrap plexf" role="group" aria-label="Plex filter">${Object.entries(PF).map(([k, l]) => `<button class="chip" data-pf="${k}" aria-pressed="${store.plexFilter === k}">${l}</button>`).join('')}</div>`; }
+function renderPlexBars(){
+  const ready = P.libraryReady;
+  const bar = $('#plexBar'); bar.hidden = !ready;
+  if (ready) bar.innerHTML = `<span class="plexbar-l">${PLEXI}<b>Plex</b> <span class="muted">${P.library.count.toLocaleString('en-GB')} films on ${esc(P.library.servers.map(s => s.name).join(', '))}</span></span>${plexFilterHTML()}`;
+  $('#fPlexGroup').hidden = !ready; if (ready) $('#fPlex').innerHTML = plexFilterHTML();
+}
+function setPlexFilter(v){
+  if (!PF[v] || store.plexFilter === v) return;
+  store.plexFilter = v; store.hero = null; store.row = null; save();
+  renderPlexBars(); renderSettingsPlex(); refreshAll();
+  toast(v === 'all' ? 'Showing all films' : v === 'only' ? 'Only films on your Plex server' : 'Hiding films you already own');
+}
+function updatePlexBits(){
+  $$('[data-act="plexwl"]').forEach(b => { const c = b.closest('[data-id]'); const f = c && getM(c.dataset.id); if (!f) return;
+    const on = P.onWatchlist(f.tmdb); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+    if (b.classList.contains('starbtn')) { b.setAttribute('aria-label', on ? 'Remove from Plex watchlist' : 'Add to Plex watchlist'); b.title = on ? 'On your Plex watchlist' : 'Add to Plex watchlist'; }
+    else { const sp = $('span', b); if (sp) sp.textContent = on ? 'On Plex watchlist' : 'Add to Plex watchlist'; } });
+}
+async function togglePlexWL(id, btn){
+  const f = getM(id); if (!f || !f.tmdb || !P.signedIn) return;
+  const on = !P.onWatchlist(f.tmdb);
+  $$('[data-act="plexwl"]').forEach(b => { const c = b.closest('[data-id]'); if (c && c.dataset.id === id) b.disabled = true; });
+  try { await P.setWatchlist(f.tmdb, on); toast(on ? `Added to your Plex watchlist: ${f.t}` : `Removed from your Plex watchlist: ${f.t}`); }
+  catch (e) { toast(e.status === 404 ? `Plex doesn't know “${f.t}”` : 'Plex watchlist unavailable right now'); }
+  finally { $$('[data-act="plexwl"]').forEach(b => b.disabled = false); updatePlexBits(); renderSettingsPlex(); }
+}
+const forwardUrl = () => location.origin + location.pathname + '#plexauth';
+async function plexSignIn(){
+  let pin = P.pendingPin(true), w = null;
+  // Open the window synchronously inside the tap (popup blockers / iOS); fill in the URL once the pin exists.
+  if (!pin || pin.exp - Date.now() < 5 * 60e3) { w = window.open('', 'plexauth'); try { pin = await P.preparePin(); } catch { if (w) w.close(); toast('Plex is unreachable right now'); return; } }
+  P.begin(pin); const url = P.authUrl(pin, forwardUrl());
+  if (w && !w.closed) { try { w.location.href = url; } catch { w = null; } } else w = window.open(url, 'plexauth');
+  if (!w) { location.href = url; return; } // popup blocked: go to Plex in this window; forwardUrl brings us back
+  P.startPolling(); renderSettingsPlex();
+}
+function plexLibLine(){
+  const L = P.library, st = P.status.lib;
+  if (st === 'loading' && !P.libraryReady) return '<span class="badge">Reading your library…</span>';
+  if (st === 'noserver') return '<span class="badge warn">No server</span> This Plex account doesn\'t own a server.';
+  if (!P.libraryReady) return `<span class="badge warn">Server unreachable</span> ${P.status.libError ? esc(P.status.libError) + '. ' : ''}${L && L.unreachable && L.unreachable.length ? esc(L.unreachable.join(', ')) + ' didn\'t answer. ' : ''}Turn on Remote Access in Plex Media Server (or use Reel Pick on the same Wi-Fi), then refresh.`;
+  const via = [...new Set(L.servers.map(s => s.via))].join('/');
+  return `<span class="badge ok">On my server</span> <b>${L.count.toLocaleString('en-GB')}</b> films on <b>${esc(L.servers.map(s => s.name).join(', '))}</b> <span class="muted">(${via}) · updated ${ago(L.t)}${st === 'loading' ? ' · refreshing…' : ''}</span>`
+    + (st === 'stale' ? `<br><span class="badge warn">Couldn't refresh</span> showing the last copy.` : '')
+    + (L.unreachable && L.unreachable.length ? `<br><span class="muted">${esc(L.unreachable.join(', '))} didn't answer.</span>` : '');
+}
+function plexPanelHTML(){
+  if (!P.signedIn) {
+    const pin = P.pendingPin();
+    return `<h3 class="h2">Plex</h3><p class="muted">Sign in to add films to your Plex watchlist and see which ones are already on your server. Your Plex sign-in stays in this browser only.</p>
+      ${pin ? `<p class="muted" id="plexWait"><span class="badge warn">Waiting for Plex…</span> Finish signing in on the Plex page, then come back here.</p>
+        <div class="row2"><button class="btn primary" id="plexSignIn">Open Plex sign-in again</button><button class="btn" id="plexCancel">Cancel</button></div>`
+        : `<button class="btn primary plexsign" id="plexSignIn">${PLEXI}<span>Sign in with Plex</span></button>`}`;
+  }
+  const u = P.user, W = P.watchlist;
+  return `<h3 class="h2">Plex</h3><p class="muted" id="plexUser"><span class="badge ok">Signed in</span> ${u ? `as <b>${esc(u.name)}</b>` : ''}</p>
+    <p class="muted" id="plexLib">${plexLibLine()}</p>
+    <p class="muted" id="plexWl">Plex watchlist: <b>${W ? W.count : '…'}</b> film${W && W.count === 1 ? '' : 's'}${P.status.wl === 'error' ? ' <span class="badge warn">couldn\'t load</span>' : ''}</p>
+    ${P.libraryReady ? `<p class="muted tiny">Show in Tonight & Browse:</p>${plexFilterHTML()}` : ''}
+    <div class="row2"><button class="btn" id="plexRefresh">Refresh library</button><button class="btn" id="plexSignOut">Sign out</button></div>`;
+}
+function renderSettingsPlex(){
+  const el = $('#setPlex'); if (!el) return;
+  el.innerHTML = plexPanelHTML();
+  const si = $('#plexSignIn', el); if (si) si.onclick = plexSignIn;
+  const ca = $('#plexCancel', el); if (ca) ca.onclick = () => P.cancelSignIn();
+  const rf = $('#plexRefresh', el); if (rf) rf.onclick = () => { P.refreshLibrary(true).catch(() => {}); P.refreshWatchlist(true).catch(() => {}); };
+  const so = $('#plexSignOut', el); if (so) so.onclick = () => { P.signOut(); toast('Signed out of Plex'); };
+}
+let plexRT; const refreshSoon = () => { clearTimeout(plexRT); plexRT = setTimeout(() => refreshAll(true), 120); };
+P.on(what => {
+  if (what === 'expired') toast('Plex sign-in expired: sign in again in Settings');
+  if (what === 'auth' || what === 'expired') { if (P.signedIn) toast('Signed in to Plex'); renderPlexBars(); renderSettingsPlex(); refreshSoon(); }
+  else if (what === 'library') { renderPlexBars(); renderSettingsPlex(); if (P.status.lib !== 'loading') refreshSoon(); }
+  else if (what === 'watchlist') { updatePlexBits(); renderSettingsPlex(); }
+  else if (what === 'pin') renderSettingsPlex();
+});
+function plexResume(){
+  if (!P.signedIn) { if (P.pendingPin()) { P.checkPin(); P.startPolling(); } return; }
+  if (P.wlStale()) P.refreshWatchlist().catch(() => {});
+  if (P.libStale()) P.refreshLibrary().catch(() => {});
+}
+window.addEventListener('storage', e => { if (e.key && e.key.startsWith('reelpick.plex')) P.reload(); });
+/* The auth popup may lose window.opener (cross-origin navigation / COOP on app.plex.tv), so it asks over a BroadcastChannel
+   whether an app window is already open. If one answers, the popup just finishes the PIN and closes. */
+const plexBC = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('reelpick-plex') : null;
+const IS_RETURN = location.hash.startsWith('#plexauth');
+if (plexBC) plexBC.onmessage = e => { if (e.data === 'ping' && !IS_RETURN) plexBC.postMessage('here'); if (e.data === 'done') P.reload(); };
+function isPlexPopup(){
+  if (window.opener && window.opener !== window) return Promise.resolve(true);
+  if (!plexBC) return Promise.resolve(false);
+  return new Promise(res => { const h = e => { if (e.data === 'here') { plexBC.removeEventListener('message', h); res(true); } };
+    plexBC.addEventListener('message', h); plexBC.postMessage('ping'); setTimeout(() => { plexBC.removeEventListener('message', h); res(false); }, 450); });
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') plexResume(); });
+window.addEventListener('pageshow', plexResume); window.addEventListener('focus', plexResume);
 
 /* ---------------- settings ---------------- */
 $('#settingsBtn').onclick = () => {
@@ -579,6 +703,7 @@ $('#settingsBtn').onclick = () => {
   const status = LIVE ? `<span class="badge ok">TMDB live</span>` : `<span class="badge warn">TMDB offline</span>`;
   const jevN = FILMS.filter(f => f.jev).length;
   openModal(`<div class="settings">
+    <div class="panel plexpanel" id="setPlex"></div>
     <div class="panel"><h3 class="h2">Genres</h3><p class="muted">Tap to rule a genre out, tap again (or long-press) to require it, tap a third time to clear. Applied everywhere.</p><div id="setGenres"></div></div>
     <div class="panel"><h3 class="h2">Data</h3><p class="muted">${status} ${SOURCE === 'catalog' ? `<span class="badge">${FILMS.length.toLocaleString('en-GB')} film catalogue</span> <span class="badge">${jevN ? jevN.toLocaleString('en-GB') + ' scored by Jev' : 'Mood scores estimated'}</span>` : '<span class="badge warn">Offline list · 170 films</span>'}</p>
       ${STATS ? `<p class="muted">Live TMDB reach: ${STATS.all.toLocaleString('en-GB')}+ films with 10+ votes.</p>` : ''}
@@ -590,12 +715,13 @@ $('#settingsBtn').onclick = () => {
       <button class="btn" id="wipe">Reset everything</button></div>
     <p class="tiny muted">This product uses the TMDB API but is not endorsed or certified by TMDB.</p></div>`, false, 'Settings');
   genreControl($('#setGenres'), () => { buildFilters(); refreshAll(); });
+  renderSettingsPlex(); if (!P.signedIn) P.preparePin().catch(() => {});
   $('#saveKey').onclick = async () => { store.tmdbKey = $('#tmdbKey').value.trim(); save(); closeModal(); await startLive(); toast(LIVE ? 'TMDB live' : 'TMDB key not accepted, offline mode'); refreshAll(); };
   $('#exportData').onclick = () => { const n = id => (getM(id) || {}).t; const out = { watchlist: store.watch.map(n), favourites: store.fav.map(n), seen: store.seen.map(n), liked: store.fb.filter(e => e.type === 'like').map(e => n(e.id)) };
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type:'application/json' })); a.download = 'reelpick-lists.json'; a.click(); };
   $('#clearRules').onclick = () => { rules.reset(); store.hero = null; store.row = null; save(); toast('Cooldowns and hidden films cleared'); closeModal(); refreshAll(); };
   $('#clearTaste').onclick = () => { store.fb = []; save(); recomputeProfile(); toast('Taste profile reset'); closeModal(); refreshAll(); };
-  $('#wipe').onclick = () => { if (confirm('Clear lists, taste profile, rules and settings?')) { localStorage.removeItem(LS_KEY); rules.reset(); location.reload(); } };
+  $('#wipe').onclick = () => { if (confirm('Clear lists, taste profile, rules and settings?')) { localStorage.removeItem(LS_KEY); rules.reset(); P.signOut(); location.reload(); } };
 };
 
 /* ---------------- views ---------------- */
@@ -639,14 +765,26 @@ async function startLive(){
 
 /* ---------------- init ---------------- */
 (async function init(){
+  if (location.hash.startsWith('#plexauth') && await isPlexPopup()) {
+    // We are the Plex sign-in popup landing on forwardUrl: finish the PIN check and close; the app window picks up the token.
+    document.body.innerHTML = '<p class="empty" style="margin:40vh auto 0;text-align:center">Signed in to Plex. You can close this window.</p>';
+    try { await P.checkPin(); } catch {} try { plexBC && plexBC.postMessage('done'); } catch {}
+    setTimeout(() => window.close(), 400); document.documentElement.dataset.ready = '1'; return;
+  }
   $('#hero').innerHTML = '<div class="empty">Loading films…</div>';
   await Promise.all([loadData(), startLive()]);
-  buildFilters(); wireFilters(); renderQuickMoods(); renderHero(); renderTonightRow(); updateSavedCount(); footer();
+  buildFilters(); wireFilters(); renderPlexBars(); renderQuickMoods(); renderHero(); renderTonightRow(); updateSavedCount(); footer();
+  const back = location.hash.startsWith('#plexauth');
   const start = (location.hash || '').slice(1);
   if (['tonight', 'quiz', 'browse', 'saved'].includes(start)) switchView(start); else switchView('tonight');
   loadOverviews();
+  if (back) { // returned from app.plex.tv in this window (redirect, or Safari opened from the home-screen app)
+    if (P.pendingPin()) { P.checkPin(); P.startPolling(); }
+    else if (!P.signedIn) toast('Plex sign-in finished. If you started in the Reel Pick home-screen app, switch back to it.');
+  }
+  setTimeout(plexResume, 1200); setInterval(plexResume, 30 * 60e3);
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
   document.documentElement.dataset.ready = '1';
 })();
-window.ReelPick = { get films(){ return FILMS; }, store, rules, get live(){ return LIVE; }, get source(){ return SOURCE; }, get stats(){ return STATS; }, getM };
+window.ReelPick = { get films(){ return FILMS; }, store, rules, plex: P, get live(){ return LIVE; }, get source(){ return SOURCE; }, get stats(){ return STATS; }, getM };
 })();

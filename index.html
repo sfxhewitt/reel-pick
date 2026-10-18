@@ -17,6 +17,7 @@
 <button id="settingsBtn" class="iconbtn" aria-label="Settings"><svg><use href="#i-gear"/></svg></button></header>
 <main id="main">
   <section id="view-tonight" class="view active">
+    <div id="plexBar" class="plexbar" hidden></div>
     <div id="hero" class="hero"></div>
     <h2 class="h2">Quick vibe <span class="muted">tap a mood, we'll surprise you</span></h2>
     <div id="quickMoods" class="mood-grid"></div>
@@ -36,6 +37,7 @@
         <div class="fgroup"><h3>Feel <small>drag to set · catalogue only</small></h3><div id="fDims" class="dims"></div></div>
         <div class="fgroup"><h3>Content</h3><div class="chips wrap" id="fFlags"></div></div>
         <div class="fgroup"><h3>Genre <small>any of · this search</small></h3><div class="chips wrap" id="fGenre"></div></div>
+        <div class="fgroup" id="fPlexGroup" hidden><h3>Plex <small>your server</small></h3><div id="fPlex"></div></div>
         <div class="fgroup"><h3>Never show <small>saved · tap to exclude</small></h3><div id="fGenrePrefs"></div></div>
         <div class="fgroup"><h3>Runtime</h3><div class="chips wrap" id="fRuntime"></div></div>
         <div class="fgroup"><h3>Era</h3><div class="chips wrap" id="fDecade"></div>
@@ -79,5 +81,6 @@
 <script src="rules.js"></script>
 <script src="reco.js"></script>
 <script src="tmdb.js"></script>
+<script src="plex.js"></script>
 <script src="app.js"></script>
 </body></html>
