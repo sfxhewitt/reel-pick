@@ -89,6 +89,15 @@ function toggleList(list, id){
   const msgs = { fav:['Added to favourites','Removed from favourites'], watch:['Added to watchlist','Removed from watchlist'], seen:['Marked as seen','Unmarked as seen'] };
   toast(`${i < 0 ? msgs[list][0] : msgs[list][1]}: ${f ? f.t : ''}`); refreshAll();
 }
+/* One-way add (never toggles off): used by result cards that dismiss the film. No re-render here; the caller does it after the exit animation. */
+function addToList(list, id){
+  const f = getM(id), already = has(list, id);
+  if (!already) { store[list].push(id); if (f) snap(f); }
+  if (list === 'seen') { const w = store.watch.indexOf(id); if (w >= 0) store.watch.splice(w, 1); }
+  save(); recomputeProfile();
+  const t = f ? f.t : '';
+  toast(list === 'watch' ? (already ? `Already on your watchlist: ${t}` : `Added to watchlist: ${t}`) : `Marked as seen: ${t}`);
+}
 function feedback(type, id){
   const f = getM(id); if (!f) return;
   store.fb = store.fb.filter(e => !(e.id === id && (e.type === 'like' || e.type === 'dislike')));
@@ -198,7 +207,9 @@ function afterRender(root){ // live-search/discover results lack runtime: fetch 
 document.addEventListener('click', e => {
   const act = e.target.closest('[data-act]');
   if (act) { const card = act.closest('[data-id]'); if (card) { e.stopPropagation(); const a = act.dataset.act, id = card.dataset.id;
-    if (['fav','watch','seen'].includes(a)) toggleList(a, id);
+    const dc = act.closest('[data-dismiss]');
+    if (dc && ['watch','seen','notint'].includes(a)) dismissPick(a, id, dc);
+    else if (['fav','watch','seen'].includes(a)) toggleList(a, id);
     else if (a === 'like' || a === 'dislike') { feedback(fbOf(id) === a ? 'clear' : a, id); refreshAll(); }
     else if (a === 'notint') { feedback('notint', id); if (picker && picker.cur && picker.cur.f.id === id) nextPick(false); else { closeModal(); refreshAll(); } }
     else if (a === 'unban') { rules.unban(id); toast('Unhidden'); renderSaved(); }
@@ -507,7 +518,9 @@ const QUIZ = [
   { k:'genres', genres:true, q:'Anything you never want to see?', note:'Tap a genre to rule it out. Tap again (or long-press) to require it. Saved for Tonight, Browse and Surprise too.' },
   { k:'taste', q:'Last one: safe bet or something different?', opts:[{ v:'classic', l:'Safe bet', s:'Highly rated, proven' }, { v:'gem', l:'Something different', s:'Less obvious picks' }, { v:'*', l:'Either', s:'' }] },
 ];
-let qi = 0; const qa = {}; let quizPicks = [], quizCtx = null;
+let qi = 0; const qa = {}; let quizPicks = [], quizCtx = null, quizPool = null, quizFound = 0;
+const QUIZ_N = 3, quizGone = new Set(); // films dismissed from the results (watchlist / seen / not interested): never shown again this visit
+const resetQuizPicks = () => { quizPicks = []; quizPool = null; };
 const qSkip = i => QUIZ[i] && QUIZ[i].skipIf && QUIZ[i].skipIf();
 function renderQuiz(){
   while (qSkip(qi)) qi++;
@@ -518,7 +531,7 @@ function renderQuiz(){
       <div id="qGenres"></div><div class="qnav"><button class="btn" id="qBack">← Back</button><button class="btn primary" id="qNext">Next →</button></div>`;
     genreControl($('#qGenres'), () => {});
     $('#qBack').onclick = () => { qi = Math.max(0, qi - 1); while (qi > 0 && qSkip(qi)) qi--; renderQuiz(); };
-    $('#qNext').onclick = () => { qi++; quizPicks = []; renderQuiz(); };
+    $('#qNext').onclick = () => { qi++; resetQuizPicks(); renderQuiz(); };
     return;
   }
   const isOn = v => step.multi ? qa[step.k].has(v) : qa[step.k] === v;
@@ -543,25 +556,56 @@ function quizSetup(){
   const runtime = qa.time && qa.time !== '*' ? new Set(qa.time === 'mid' ? ['short', 'mid'] : [qa.time]) : null;
   return { ctx, filter, runtime };
 }
+/* Ranked (MMR) pool: the first QUIZ_N are shown, the rest backfill when a pick is dismissed. MMR is greedy, so the first
+   QUIZ_N are exactly what suggest(c, ctx, QUIZ_N) would return. Backfills are only marked as shown when they appear. */
 function computeQuizPicks(){
   const { ctx, filter, runtime } = quizSetup(); quizCtx = ctx;
-  let c = candidates({ runtime, filter, minVotes: qa.taste === 'gem' ? 150 : 400 });
-  if (c.length < 3) c = candidates({ runtime, filter });
-  quizPicks = suggest(c, ctx, 3, .7); rules.markShown(quizPicks.map(r => r.f.id));
+  const ok = f => !quizGone.has(f.id) && filter(f);
+  let c = candidates({ runtime, filter: ok, minVotes: qa.taste === 'gem' ? 150 : 400 });
+  if (c.length < QUIZ_N) c = candidates({ runtime, filter: ok });
+  quizPool = suggest(c, ctx, QUIZ_N + 12, .7); quizFound = quizPool.length;
+  quizPicks = quizPool.splice(0, QUIZ_N); rules.markShown(quizPicks.map(r => r.f.id));
+}
+const quizKeep = f => !quizGone.has(f.id) && !has('seen', f.id) && !rules.banInfo(f.id) && prefOK(f);
+/* Drop dismissed / seen / hidden picks (the next one is promoted to Top pick) and backfill from the ranked pool. */
+function settleQuizPicks(){
+  quizPicks = quizPicks.filter(r => quizKeep(r.f));
+  const ids = new Set(quizPicks.map(r => r.f.id)), added = [];
+  while (quizPicks.length < QUIZ_N && quizPool.length) {
+    const r = quizPool.shift();
+    if (!ids.has(r.f.id) && quizKeep(r.f) && rules.eligible(r.f.id)) { r.fresh = true; quizPicks.push(r); ids.add(r.f.id); added.push(r.f.id); }
+  }
+  if (added.length) rules.markShown(added);
+}
+/* Result-card action that also removes the film: do its normal job, collapse the card, then re-render (which backfills). */
+function dismissPick(a, id, card){
+  if (card.classList.contains('leaving') || !getM(id)) return;
+  if (a === 'notint') feedback('notint', id); else addToList(a, id);
+  quizGone.add(id);
+  collapseOut(card, () => refreshAll());
+}
+function collapseOut(el, done){
+  let fin = false; const end = () => { if (!fin) { fin = true; done(); } };
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { el.classList.add('leaving'); return end(); }
+  el.style.height = el.offsetHeight + 'px'; void el.offsetHeight; // pin the current height so it can animate to 0
+  el.classList.add('leaving'); el.style.height = '0px';
+  el.addEventListener('transitionend', e => { if (e.target === el && e.propertyName === 'height') end(); });
+  setTimeout(end, 420);
 }
 function renderQuizResults(){
-  if (!quizPicks.length) computeQuizPicks();
+  if (!quizPool) computeQuizPicks(); else settleQuizPicks();
   const el = $('#quiz'), ctx = quizCtx;
+  const none = quizFound ? `<div class="empty">That's every pick for these answers.<br>Shuffle for more, or start over.</div>` : '<div class="empty">Nothing new fits every answer. Try loosening one.</div>';
   el.innerHTML = `<div class="progress"><i style="width:100%"></i></div><div class="qstep">Your picks</div><h2 class="qh">Here's what we reckon</h2>
-    <div class="quiz-results">${quizPicks.length ? quizPicks.map((r, i) => { const f = r.f, fb = fbOf(f.id); return `<div class="pick deal ${i === 0 ? 'first' : ''}" data-id="${esc(f.id)}">
+    <div class="quiz-results">${quizPicks.length ? quizPicks.map((r, i) => { const f = r.f, onW = has('watch', f.id); const html = `<div class="pick deal ${i === 0 ? 'first' : ''} ${r.fresh ? 'arrive' : ''}" data-id="${esc(f.id)}" data-dismiss>
       <div data-open>${posterHTML(f)}</div>
       <div><span class="eyebrow">${i === 0 ? 'Top pick' : 'Also great'}</span><h3 class="pt" data-open>${esc(f.t)}</h3>
       <div class="meta"><span class="star">★ ${f.wr.toFixed(1)}</span><span>${f.y || ''}</span><span data-run="${esc(f.id)}">${fmtRun(f.r)}</span><span>${esc(f.g.slice(0, 3).join(' · '))}</span></div>
       ${f.d ? `<p>${esc(f.d)}</p>` : ''}<div class="why"><b>Why this pick?</b> ${esc(R.why(r, ctx))}</div>
-      <div class="actions"><button class="btn sm ${has('watch', f.id) ? 'on' : ''}" data-act="watch">${has('watch', f.id) ? 'On watchlist' : 'Watchlist'}</button><button class="btn sm ${fb === 'like' ? 'on' : ''}" data-act="like">▲ Like</button><button class="btn sm ${fb === 'dislike' ? 'on' : ''}" data-act="dislike">▼ Dislike</button><button class="btn sm" data-act="seen">Seen it</button><button class="btn sm" data-act="notint">Not interested</button></div>
-      </div></div>`; }).join('') : '<div class="empty">Nothing new fits every answer. Try loosening one.</div>'}</div>
+      <div class="actions pick-actions"><button class="btn sm ${onW ? 'on' : ''}" data-act="watch" title="Add to your watchlist and clear it from these picks">${onW ? 'On watchlist' : 'Watchlist'}</button><button class="btn sm" data-act="seen" title="Mark as seen and clear it from these picks">Seen it</button><button class="btn sm" data-act="notint" title="Hide for a year and clear it from these picks">Not interested</button></div>
+      </div></div>`; r.fresh = false; return html; }).join('') : none}</div>
     <div class="qnav"><button class="btn" id="qRestart">↺ Start over</button><button class="btn primary" id="qShuffle" title="Counts as a skip for these picks">${ico('dice')} Shuffle picks</button></div>`;
-  $('#qRestart').onclick = () => { qi = 0; for (const k in qa) delete qa[k]; quizPicks = []; renderQuiz(); };
+  $('#qRestart').onclick = () => { qi = 0; for (const k in qa) delete qa[k]; resetQuizPicks(); renderQuiz(); };
   $('#qShuffle').onclick = () => { quizPicks.forEach(r => feedback('skip', r.f.id)); computeQuizPicks(); renderQuizResults(); };
   afterRender(el);
 }

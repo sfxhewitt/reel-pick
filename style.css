@@ -242,8 +242,15 @@ select{min-height:44px;padding:0 12px;color:var(--txt);background:rgba(5,5,10,.7
 .opt .s{font:400 10px var(--mono);letter-spacing:.06em;color:var(--mut)}
 .opt.on{color:#000;background:var(--water);box-shadow:0 0 18px rgba(25,227,255,.45)}.opt.on .s{color:#023}
 .qnav{display:flex;justify-content:space-between;gap:8px;margin-top:16px}.qnav .btn{margin-top:0}
-.quiz-results{display:grid;gap:10px}
-.pick.deal{grid-template-columns:96px 1fr;gap:12px;align-items:start}
+.quiz-results{display:flex;flex-direction:column}
+.quiz-results>*{margin-bottom:10px}.quiz-results+.qnav{margin-top:6px}
+.pick.deal{grid-template-columns:96px 1fr;gap:12px;align-items:start;transition:height .3s cubic-bezier(.4,0,.2,1),opacity .2s ease,transform .3s cubic-bezier(.4,0,.2,1),margin .3s ease,padding .3s ease}
+/* dismissed pick: fade + slide, then collapse its height (JS pins the start height); the next card slides up */
+.pick.leaving{opacity:0;transform:translateX(18px) scale(.97);padding-top:0;padding-bottom:0;margin-bottom:0;overflow:hidden;pointer-events:none}
+.pick.arrive{animation:pickin .34s cubic-bezier(.2,.8,.2,1) both}
+@keyframes pickin{from{opacity:0;transform:translateY(12px)}}
+@media (max-width:720px){.pick-actions .btn{flex:1 1 auto;padding:0 14px}} /* phone: rows fill evenly when the buttons wrap */
+@media (prefers-reduced-motion:reduce){.pick.deal{transition:none}.pick.arrive{animation:none}}
 .pick .pt{margin:6px 0;font:700 17px/1.15 var(--disp);letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
 .pick p{margin:6px 0;font-size:12.5px;color:#cfcbe8}
 .pick.first::before{content:"";position:absolute;inset:0;pointer-events:none;background:var(--holo);background-size:300% 300%;opacity:.14;mix-blend-mode:screen;animation:foil 7s ease-in-out infinite alternate}

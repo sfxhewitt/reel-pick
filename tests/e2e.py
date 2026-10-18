@@ -104,6 +104,7 @@ async def run(p, label, vp, mobile):
     gs = await pg.evaluate(GENRES_OF, "#quiz .pick")
     check(f"{label}: quiz exclusions filter the picks (no Comedy/Horror)", len(gs) == 3 and not any(set(g) & {"Comedy", "Horror"} for g in gs), gs)
     await pg.screenshot(path=f"{OUT}/{label}-quiz.png", full_page=False)
+    await quiz_dismiss(pg, label, mobile)
     # exclusions persist and apply to Tonight + Browse
     await pg.reload(); await pg.wait_for_function("document.documentElement.dataset.ready==='1'", timeout=40000)
     gp = await pg.evaluate("ReelPick.store.genrePrefs")
@@ -130,6 +131,55 @@ async def run(p, label, vp, mobile):
     check(f"{label}: no console errors", not errs, errs[:5])
     check(f"{label}: TMDB endpoints used", len(set(tmdb_calls)) >= 4, sorted(set(c.replace("https://api.themoviedb.org/3", "") for c in tmdb_calls if "/movie/" not in c)) + ["/movie/{id}"])
     await ctx.close()
+
+PICKS_JS = "()=>[...document.querySelectorAll('#quiz .pick')].map(p=>({id:p.dataset.id, top:p.querySelector('.eyebrow').textContent.trim(), first:p.classList.contains('first')}))"
+async def quiz_dismiss(pg, label, mobile):
+    """Quiz result cards: no Like/Dislike; Watchlist / Seen it / Not interested do their job AND remove the card (animated),
+    the next pick is promoted to Top pick, the list is backfilled to 3, and dismissed films never come back on re-render."""
+    acts = await pg.eval_on_selector_all("#quiz .pick [data-act]", "e=>e.map(b=>b.dataset.act)")
+    txt = await pg.eval_on_selector_all("#quiz .pick button", "e=>e.map(b=>b.textContent.trim().toLowerCase())")
+    check(f"{label}: quiz cards have no Like/Dislike, only Watchlist / Seen it / Not interested",
+          acts and set(acts) == {"watch", "seen", "notint"} and len(acts) == 3 * await pg.locator("#quiz .pick").count() and not [t for t in txt if "like" in t], [acts, txt])
+    # buttons wrap tidily: inside their card, no overlaps, 44px tall
+    lay = await pg.evaluate("""()=>[...document.querySelectorAll('#quiz .pick')].map(p=>{const c=p.getBoundingClientRect();const bs=[...p.querySelectorAll('.actions .btn')].map(b=>b.getBoundingClientRect());
+      const ov=bs.some((a,i)=>bs.some((b,j)=>j>i&&a.left<b.right-1&&b.left<a.right-1&&a.top<b.bottom-1&&b.top<a.bottom-1));
+      return {inside:bs.every(b=>b.left>=c.left-1&&b.right<=c.right+1), ov, h:Math.min(...bs.map(b=>b.height))}})""")
+    check(f"{label}: quiz action buttons wrap inside the card without overlapping (44px+)", lay and all(x["inside"] and not x["ov"] and x["h"] >= 44 for x in lay), lay)
+    if mobile: await pg.locator("#quiz .pick").first.screenshot(path=f"{OUT}/{label}-quiz-card.png")
+    before = await pg.evaluate(PICKS_JS); gone = []
+
+    async def dismiss(idx, act):
+        before_now = await pg.evaluate(PICKS_JS)
+        pid = before_now[idx]["id"]
+        await pg.click(f"#quiz .pick[data-id='{pid}'] [data-act={act}]")
+        anim = await pg.evaluate("id=>{const p=document.querySelector(`#quiz .pick[data-id='${id}']`);return p?[p.classList.contains('leaving'),getComputedStyle(p).transitionDuration]:null}", pid)
+        await pg.wait_for_function("id=>!document.querySelector(`#quiz .pick[data-id='${id}']`)", arg=pid, timeout=3000)
+        await pg.wait_for_timeout(450)
+        gone.append(pid)
+        return pid, before_now, await pg.evaluate(PICKS_JS), anim
+
+    # 1. Seen it on the Top pick: marked seen, removed, #2 promoted to Top pick, backfilled to 3
+    pid, b, a, anim = await dismiss(0, "seen")
+    seen = await pg.evaluate("id=>ReelPick.store.seen.includes(id)", pid)
+    check(f"{label}: 'Seen it' marks seen and collapses the card out (animated)", seen and anim and anim[0] and anim[1] != "0s", [pid, seen, anim])
+    check(f"{label}: removing the Top pick promotes the next pick and backfills to 3",
+          len(a) == 3 and a[0]["id"] == b[1]["id"] and a[0]["top"].lower() == "top pick" and a[0]["first"] and a[1]["id"] == b[2]["id"] and pid not in [x["id"] for x in a], [b, a])
+    # 2. Watchlist on pick 2: added to watchlist, removed
+    pid, b, a, _ = await dismiss(1, "watch")
+    onw = await pg.evaluate("id=>ReelPick.store.watch.includes(id)", pid)
+    check(f"{label}: 'Watchlist' adds to the watchlist and removes the card", onw and len(a) == 3 and pid not in [x["id"] for x in a] and a[0]["id"] == b[0]["id"], [pid, onw, b, a])
+    # 3. Not interested on pick 3: hidden for a year, removed
+    pid, b, a, _ = await dismiss(2, "notint")
+    ban = await pg.evaluate("id=>!!ReelPick.rules.banInfo(id)", pid)
+    check(f"{label}: 'Not interested' hides the film and removes the card", ban and len(a) == 3 and pid not in [x["id"] for x in a], [pid, ban, a])
+    # re-render (leave and come back to the quiz, and a global refresh via the detail sheet) never brings them back
+    await pg.click("nav.tabs button[data-view=tonight]"); await pg.click("nav.tabs button[data-view=quiz]"); await pg.wait_for_selector("#quiz .pick")
+    r1 = [x["id"] for x in await pg.evaluate(PICKS_JS)]
+    await pg.locator("#quiz .pick [data-open]").first.click(); await pg.wait_for_selector("#modal:not([hidden]) .dv")
+    await pg.click(".dv [data-act=fav]"); await pg.wait_for_timeout(200); await pg.click("#sheetClose"); await pg.wait_for_selector("#modal", state="hidden")
+    r2 = [x["id"] for x in await pg.evaluate(PICKS_JS)]
+    check(f"{label}: dismissed films stay gone after re-render", len(r1) == 3 and r1 == r2 and not set(gone) & set(r1 + r2), [gone, r1, r2])
+    await pg.screenshot(path=f"{OUT}/{label}-quiz-after.png")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from e2e_insets import STANDALONE_CSS, INSET_JS

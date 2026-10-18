@@ -24,6 +24,10 @@ an estimate from genre priors and a keyword lexicon (`score_src` = 0 in the JSON
 Circumplex affect space (Russell 1980). The quiz offers "match my mood" or "change my mood" (Zillmann's mood management).
 Ranking uses cosine similarity over the affect vector plus genre/keyword TF-IDF, a Bayesian-average rating, and MMR for diversity.
 Like, dislike, skip and "not interested" feed a Rocchio-style taste profile. Every suggestion comes with a short "why this pick".
+Quiz result cards have three actions: **Watchlist**, **Seen it** and **Not interested**. Each does its job and clears the film from
+the picks with a quick fade/collapse; the next pick is promoted to Top pick and the list is backfilled from the remaining ranked
+candidates, so it stays at three while there are any. Dismissed films don't come back for the rest of the visit.
+(Like/dislike are still in the film detail sheet.)
 
 ## Plex (optional)
 Settings → **Sign in with Plex** uses Plex's PIN flow for web apps: `POST plex.tv/api/v2/pins?strong=true` (X-Plex-Product

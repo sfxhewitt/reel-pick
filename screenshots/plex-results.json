@@ -2,7 +2,7 @@
  {
   "check": "signed out: no Plex badges or watchlist buttons on cards",
   "ok": true,
-  "detail": "[[278, False, False], [496243, False, False], [122, False, False]]"
+  "detail": "[[278, False, False], [680, False, False], [687163, False, False]]"
  },
  {
   "check": "signed out: Plex bar hidden on Tonight",
@@ -32,7 +32,7 @@
  {
   "check": "auth page: app.plex.tv/auth with clientID, code, product, forwardUrl",
   "ok": true,
-  "detail": "https://app.plex.tv/auth#?clientID=0af4af3e-d03d-45a0-9b46-8c234a48161a&code=MOCKCODE&context%5Bdevice%5D%5Bproduct%5D=Reel%20Pick&forwardUrl=http%3A%2F%2Flocalhost%3A47391%2F%23plexauth"
+  "detail": "https://app.plex.tv/auth#?clientID=c2fe9a8a-0785-4d38-a303-c85b55d3e919&code=MOCKCODE&context%5Bdevice%5D%5Bproduct%5D=Reel%20Pick&forwardUrl=http%3A%2F%2Flocalhost%3A47391%2F%23plexauth"
  },
  {
   "check": "settings shows 'Waiting for Plex\u2026' while the PIN is open",
@@ -72,7 +72,7 @@
  {
   "check": "Tonight cards: 'On Plex' badge exactly on owned films (incl. legacy IMDb guids)",
   "ok": true,
-  "detail": "[[278, True, True], [496243, True, True], [122, True, True], [424, False, True], [687163, False, True], [157336, True, True], [13, True, True], [155, False, True], [389, False, True], [680, False, True], [372058, True, True], [240, True, True], [936075, False, True], [238, True, True]]"
+  "detail": "[[278, True, True], [680, False, True], [687163, False, True], [238, True, True], [13, True, True], [372058, True, True], [424, False, True], [155, False, True], [129, True, True], [122, True, True], [157336, True, True], [496243, True, True], [240, True, True], [497, False, True]]"
  },
  {
   "check": "Browse cards: badge matches library",
@@ -127,7 +127,7 @@
  {
   "check": "Tonight 'Only on my Plex': hero + row all owned",
   "ok": true,
-  "detail": "[671, 14]"
+  "detail": "[14160, 14]"
  },
  {
   "check": "filter choice + library cache survive reload",
