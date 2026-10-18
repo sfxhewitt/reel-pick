@@ -1,0 +1,177 @@
+[
+ {
+  "check": "desktop: TMDB live + catalogue loaded",
+  "ok": true,
+  "detail": "{'live': True, 'src': 'catalog', 'n': 10049}"
+ },
+ {
+  "check": "desktop: reach stats",
+  "ok": true,
+  "detail": "{'all': 106053, 'uk': 38829, 'capped': False}"
+ },
+ {
+  "check": "desktop: hero poster loads from TMDB",
+  "ok": true,
+  "detail": "{'n': 1, 'ok': 1, 'tmdb': 1}"
+ },
+ {
+  "check": "desktop: mood+slider filter narrows catalogue",
+  "ok": true,
+  "detail": "3,048 FILMS IN CATALOGUE"
+ },
+ {
+  "check": "desktop: browse posters load",
+  "ok": true,
+  "detail": "{'n': 8, 'ok': 8, 'tmdb': 8}"
+ },
+ {
+  "check": "desktop: UK providers refreshed live on cards",
+  "ok": true,
+  "detail": "live=33 services=['NETFLIX', 'PARAMOUNT+', 'PRIME', 'DISNEY+', 'NOW', 'MAX', 'iPLAYER', 'APPLE TV', 'ITVX']"
+ },
+ {
+  "check": "desktop: 'why' text on results",
+  "ok": true,
+  "detail": "Fits laugh: light in tone (80%), funny (90%); 8.5 weighted rating from 31k votes."
+ },
+ {
+  "check": "desktop: search hits catalogue + live TMDB search",
+  "ok": true,
+  "detail": "catalogue=3 live=17"
+ },
+ {
+  "check": "desktop: live discover (Comedy, 90\u2013120m, Netflix) from TMDB",
+  "ok": true,
+  "detail": "493 FILMS \u00b7 LIVE TMDB; 40/40 refreshed cards show Netflix"
+ },
+ {
+  "check": "desktop: live discover posters load",
+  "ok": true,
+  "detail": "{'n': 8, 'ok': 8, 'tmdb': 8}"
+ },
+ {
+  "check": "desktop: detail shows live UK providers + cast",
+  "ok": true,
+  "detail": "provider logos=3 cast=10"
+ },
+ {
+  "check": "desktop: quiz returns 3 picks with mood-management 'why'",
+  "ok": true,
+  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: light in tone (80%), comforting (75%); 8.3 weighted rating from 19k votes."
+ },
+ {
+  "check": "desktop: picker never repeats + skips logged + not-interested bans",
+  "ok": true,
+  "detail": "[['tmdb-510', 'cooldown', 1], ['tmdb-637', 'cooldown', 1], ['tmdb-73', 'cooldown', 1], ['tmdb-68718', 'banned', 0]]"
+ },
+ {
+  "check": "desktop: no console errors",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "desktop: TMDB endpoints used",
+  "ok": true,
+  "detail": "['/discover/movie', '/search/movie', '/watch/providers/movie', '/movie/{id}']"
+ },
+ {
+  "check": "iphone: TMDB live + catalogue loaded",
+  "ok": true,
+  "detail": "{'live': True, 'src': 'catalog', 'n': 10049}"
+ },
+ {
+  "check": "iphone: reach stats",
+  "ok": true,
+  "detail": "{'all': 106053, 'uk': 38829, 'capped': False}"
+ },
+ {
+  "check": "iphone: hero poster loads from TMDB",
+  "ok": true,
+  "detail": "{'n': 1, 'ok': 1, 'tmdb': 1}"
+ },
+ {
+  "check": "iphone: mood+slider filter narrows catalogue",
+  "ok": true,
+  "detail": "3,048 FILMS IN CATALOGUE"
+ },
+ {
+  "check": "iphone: browse posters load",
+  "ok": true,
+  "detail": "{'n': 6, 'ok': 6, 'tmdb': 6}"
+ },
+ {
+  "check": "iphone: UK providers refreshed live on cards",
+  "ok": true,
+  "detail": "live=33 services=['NETFLIX', 'PARAMOUNT+', 'PRIME', 'DISNEY+', 'NOW', 'MAX', 'iPLAYER', 'APPLE TV', 'ITVX']"
+ },
+ {
+  "check": "iphone: 'why' text on results",
+  "ok": true,
+  "detail": "Fits laugh: light in tone (80%), funny (90%); 8.5 weighted rating from 31k votes."
+ },
+ {
+  "check": "iphone: search hits catalogue + live TMDB search",
+  "ok": true,
+  "detail": "catalogue=3 live=17"
+ },
+ {
+  "check": "iphone: live discover (Comedy, 90\u2013120m, Netflix) from TMDB",
+  "ok": true,
+  "detail": "493 FILMS \u00b7 LIVE TMDB; 40/40 refreshed cards show Netflix"
+ },
+ {
+  "check": "iphone: live discover posters load",
+  "ok": true,
+  "detail": "{'n': 6, 'ok': 6, 'tmdb': 6}"
+ },
+ {
+  "check": "iphone: detail shows live UK providers + cast",
+  "ok": true,
+  "detail": "provider logos=3 cast=10"
+ },
+ {
+  "check": "iphone: quiz returns 3 picks with mood-management 'why'",
+  "ok": true,
+  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: light in tone (80%), comforting (75%); 8.3 weighted rating from 19k votes."
+ },
+ {
+  "check": "iphone: picker never repeats + skips logged + not-interested bans",
+  "ok": true,
+  "detail": "[['tmdb-510', 'cooldown', 1], ['tmdb-637', 'cooldown', 1], ['tmdb-73', 'cooldown', 1], ['tmdb-38286', 'banned', 0]]"
+ },
+ {
+  "check": "iphone: no console errors",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "iphone: TMDB endpoints used",
+  "ok": true,
+  "detail": "['/discover/movie', '/search/movie', '/watch/providers/movie', '/movie/{id}']"
+ },
+ {
+  "check": "clock: after reload hero is on cooldown, strikes + ban persisted",
+  "ok": true,
+  "detail": "['cooldown', 2, 'banned']"
+ },
+ {
+  "check": "clock: +31 days day-0 cooldown expired (free or re-suggested), new hero picked",
+  "ok": true,
+  "detail": "[1795028400000, True, True, 1795028400000]"
+ },
+ {
+  "check": "clock: +31 days ban still active",
+  "ok": true,
+  "detail": "[1795028400000, True, True, 1795028400000]"
+ },
+ {
+  "check": "clock: third skip (a month later) bans for a year",
+  "ok": true,
+  "detail": "['banned', 'three-skips']"
+ },
+ {
+  "check": "clock: +366 days not-interested ban lifted; 3-skip ban (set at +31d) still active",
+  "ok": true,
+  "detail": "[False, True]"
+ }
+]

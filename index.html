@@ -1,115 +1,85 @@
-<!DOCTYPE html>
-<html lang="en-GB">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0b10">
-<title>Reel Pick — what shall we watch?</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<div class="bg-glow"></div>
-<header class="topbar">
-  <div class="brand"><span class="logo">🎬</span><span>Reel<b>Pick</b></span></div>
-  <nav class="tabs" role="tablist">
-    <button class="tab active" data-view="tonight">Tonight</button>
-    <button class="tab" data-view="quiz">Quiz</button>
-    <button class="tab" data-view="browse">Browse</button>
-    <button class="tab" data-view="saved">Saved <span id="savedCount" class="count"></span></button>
-  </nav>
-  <button class="icon-btn" id="settingsBtn" title="Settings">⚙︎</button>
-</header>
-
-<main>
-  <!-- TONIGHT -->
+<!doctype html><html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05050a"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="icon.svg"><link rel="preconnect" href="https://api.themoviedb.org"><link rel="preconnect" href="https://image.tmdb.org">
+<title>REEL//PICK · what shall we watch?</title><link rel="stylesheet" href="style.css"></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+ <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></symbol>
+ <symbol id="i-quiz" viewBox="0 0 24 24"><path d="M9.2 9a3 3 0 1 1 4.3 2.7c-.9.5-1.5 1.2-1.5 2.3v.5M12 18h.01"/><rect x="3" y="3" width="18" height="18" rx="3"/></symbol>
+ <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
+ <symbol id="i-pin" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></symbol>
+ <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+ <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></symbol>
+ <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+ <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4"/></symbol>
+</svg>
+<header class="top"><div class="brand"><img src="icon.svg" alt="" width="34" height="34"><div><h1 id="title">Reel Pick</h1><p id="sub" class="sub">what shall we watch?</p></div></div>
+<button id="settingsBtn" class="iconbtn" aria-label="Settings"><svg><use href="#i-gear"/></svg></button></header>
+<main id="main">
   <section id="view-tonight" class="view active">
     <div id="hero" class="hero"></div>
-    <div class="quick">
-      <h2>Quick vibe</h2>
-      <p class="muted">Tap a mood and we'll surprise you with something that fits.</p>
-      <div id="quickMoods" class="mood-grid"></div>
-    </div>
-    <div class="row-head"><h2>Top-rated on your services</h2><button class="link" data-goto="browse">Browse all →</button></div>
+    <h2 class="h2">Quick vibe <span class="muted">tap a mood, we'll surprise you</span></h2>
+    <div id="quickMoods" class="mood-grid"></div>
+    <div class="row-head"><h2 class="h2">Top-rated on your services</h2><button class="link" data-goto="browse">Browse all →</button></div>
     <div id="tonightRow" class="hscroll"></div>
   </section>
 
-  <!-- QUIZ -->
-  <section id="view-quiz" class="view">
-    <div id="quiz" class="quiz"></div>
-  </section>
+  <section id="view-quiz" class="view"><div id="quiz" class="quiz panel"></div></section>
 
-  <!-- BROWSE -->
   <section id="view-browse" class="view">
+    <div class="sticky searchwrap"><input type="search" id="q" class="search" placeholder="Search any film…" autocomplete="off" aria-label="Search films"></div>
     <div class="browse-layout">
-      <aside class="filters" id="filters">
-        <div class="filters-head">
-          <h2>Filters</h2>
-          <span><button class="link" id="resetFilters">Reset</button> <button class="btn gold small mobile-only" id="closeFilters">Done</button></span>
-        </div>
-        <input type="search" id="q" placeholder="Search title or keyword…" autocomplete="off">
-        <div class="fgroup"><h3>Mood</h3><div class="chips" id="fMood"></div></div>
-        <div class="fgroup"><h3>Genre <small>(any of)</small></h3><div class="chips" id="fGenre"></div></div>
-        <div class="fgroup"><h3>Runtime</h3><div class="chips" id="fRuntime"></div></div>
-        <div class="fgroup"><h3>Era</h3><div class="chips" id="fDecade"></div>
-          <div class="range2">
-            <label>From <input type="number" id="yFrom" min="1970" max="2026"></label>
-            <label>To <input type="number" id="yTo" min="1970" max="2026"></label>
-          </div>
-        </div>
-        <div class="fgroup"><h3>Min IMDb rating <output id="ratingOut">any</output></h3>
-          <input type="range" id="minRating" min="6" max="9" step="0.1" value="6">
-        </div>
-        <div class="fgroup"><h3>Streaming (UK)</h3><div class="chips" id="fServices"></div>
-          <label class="toggle"><input type="checkbox" id="onlyMine"> <span>Only show titles on these</span></label>
-          <p class="tiny muted">Availability is approximate &amp; changes often — tap “Check where to watch” to confirm.</p>
-        </div>
-        <label class="toggle"><input type="checkbox" id="hideSeen" checked> <span>Hide films I've marked seen</span></label>
+      <aside class="filters panel" id="filters">
+        <div class="filters-head"><h2 class="h2">Filters</h2><span><button class="link" id="resetFilters">Reset</button> <button class="btn sm mobile-only" id="closeFilters">Done</button></span></div>
+        <div class="fgroup"><h3>Source</h3><div class="chips wrap" id="srcChips"><button class="chip" data-src="cat" aria-pressed="true">Scored catalogue</button><button class="chip" data-src="live" aria-pressed="false">All of TMDB · live</button></div></div>
+        <div class="fgroup"><h3>Mood</h3><div class="chips wrap" id="fMood"></div></div>
+        <div class="fgroup"><h3>Feel <small>drag to set · catalogue only</small></h3><div id="fDims" class="dims"></div></div>
+        <div class="fgroup"><h3>Content</h3><div class="chips wrap" id="fFlags"></div></div>
+        <div class="fgroup"><h3>Genre <small>any of</small></h3><div class="chips wrap" id="fGenre"></div></div>
+        <div class="fgroup"><h3>Runtime</h3><div class="chips wrap" id="fRuntime"></div></div>
+        <div class="fgroup"><h3>Era</h3><div class="chips wrap" id="fDecade"></div>
+          <div class="range2"><label>From <input type="number" id="yFrom" min="1920" max="2027"></label><label>To <input type="number" id="yTo" min="1920" max="2027"></label></div></div>
+        <div class="fgroup"><h3>Min weighted rating <output id="ratingOut">any</output></h3><input type="range" id="minRating" min="6" max="9" step="0.1" value="6" aria-label="Minimum rating"></div>
+        <div class="fgroup"><h3>Streaming · UK</h3><div class="chips wrap" id="fServices"></div>
+          <label class="tog"><span>Only show titles on these</span><input type="checkbox" id="onlyMine"></label>
+          <p class="muted tiny" id="svcNote"></p></div>
+        <label class="tog"><span>Hide films I've marked seen</span><input type="checkbox" id="hideSeen" checked></label>
       </aside>
       <div class="results-wrap">
         <div class="results-bar">
-          <button class="btn ghost small mobile-only" id="toggleFilters">☰ Filters</button>
-          <span id="resultCount" class="muted"></span>
-          <select id="sort">
-            <option value="match">Best match</option>
-            <option value="rating">Highest rated</option>
-            <option value="new">Newest</option>
-            <option value="old">Oldest</option>
-            <option value="short">Shortest</option>
-            <option value="az">A–Z</option>
-          </select>
-          <button class="btn gold" id="surpriseBtn">🎲 Surprise me</button>
+          <button class="chip mobile-only" id="toggleFilters" aria-pressed="false">Filters</button>
+          <span id="resultCount" class="rcount"></span>
+          <select id="sort" aria-label="Sort"><option value="match">Best match</option><option value="rating">Highest rated</option><option value="new">Newest</option><option value="old">Oldest</option><option value="short">Shortest</option><option value="az">A–Z</option></select>
         </div>
-        <div id="activeChips" class="active-chips"></div>
+        <div id="activeChips" class="chips wrap active-chips"></div>
         <div id="results" class="grid"></div>
+        <button id="loadMore" class="btn" hidden>Load more</button>
       </div>
     </div>
   </section>
 
-  <!-- SAVED -->
   <section id="view-saved" class="view">
-    <div class="saved-tabs">
-      <button class="chip on" data-list="watch">📌 Watchlist</button>
-      <button class="chip" data-list="fav">♥ Favourites</button>
-      <button class="chip" data-list="seen">✓ Seen</button>
-    </div>
-    <div class="row-head"><span id="savedInfo" class="muted"></span><button class="btn gold small" id="savedSurprise">🎲 Pick from this list</button></div>
+    <div class="chips sticky saved-tabs"><button class="chip" aria-pressed="true" data-list="watch">Watchlist</button><button class="chip" aria-pressed="false" data-list="fav">Favourites</button><button class="chip" aria-pressed="false" data-list="seen">Seen</button><button class="chip" aria-pressed="false" data-list="hidden">Hidden</button></div>
+    <p id="savedInfo" class="muted"></p>
     <div id="savedGrid" class="grid"></div>
   </section>
+  <footer class="foot muted tiny" id="foot"></footer>
 </main>
 
-<footer class="foot muted tiny">
-  Curated offline dataset of <span id="nFilms"></span> films · ratings are approximate IMDb scores · UK streaming tags are approximate.
-  Works fully offline. Optional TMDB posters in ⚙︎ settings.
-</footer>
-
-<div id="modal" class="modal" hidden>
-  <div class="modal-backdrop" data-close></div>
-  <div class="modal-card" role="dialog" aria-modal="true"><button class="icon-btn close" data-close aria-label="Close">✕</button><div id="modalBody"></div></div>
-</div>
-<div id="toast" class="toast"></div>
-
+<div id="modal" class="modal" hidden><div class="modal-backdrop" data-close></div>
+  <div class="modal-card" role="dialog" aria-modal="true"><button class="iconbtn close" data-close aria-label="Close">✕</button><div id="modalBody"></div></div></div>
+<button id="fab" class="fab" aria-label="Surprise me"><svg><use href="#i-dice"/></svg><span>Surprise me</span></button>
+<div id="toast" class="toast" role="status"></div>
+<nav class="tabs" aria-label="Sections">
+ <button data-view="tonight" class="active"><svg><use href="#i-moon"/></svg><span>Tonight</span></button>
+ <button data-view="quiz"><svg><use href="#i-quiz"/></svg><span>Quiz</span></button>
+ <button data-view="browse"><svg><use href="#i-grid"/></svg><span>Browse</span></button>
+ <button data-view="saved"><svg><use href="#i-pin"/></svg><span>Saved</span><span id="savedCount" class="nbadge" hidden></span></button>
+</nav>
+<script src="config.js"></script>
 <script src="data.js"></script>
+<script src="rules.js"></script>
+<script src="reco.js"></script>
+<script src="tmdb.js"></script>
 <script src="app.js"></script>
-</body>
-</html>
+</body></html>
