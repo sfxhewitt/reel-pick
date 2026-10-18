@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b10">
+<title>Reel Pick — what shall we watch?</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bg-glow"></div>
+<header class="topbar">
+  <div class="brand"><span class="logo">🎬</span><span>Reel<b>Pick</b></span></div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-view="tonight">Tonight</button>
+    <button class="tab" data-view="quiz">Quiz</button>
+    <button class="tab" data-view="browse">Browse</button>
+    <button class="tab" data-view="saved">Saved <span id="savedCount" class="count"></span></button>
+  </nav>
+  <button class="icon-btn" id="settingsBtn" title="Settings">⚙︎</button>
+</header>
+
+<main>
+  <!-- TONIGHT -->
+  <section id="view-tonight" class="view active">
+    <div id="hero" class="hero"></div>
+    <div class="quick">
+      <h2>Quick vibe</h2>
+      <p class="muted">Tap a mood and we'll surprise you with something that fits.</p>
+      <div id="quickMoods" class="mood-grid"></div>
+    </div>
+    <div class="row-head"><h2>Top-rated on your services</h2><button class="link" data-goto="browse">Browse all →</button></div>
+    <div id="tonightRow" class="hscroll"></div>
+  </section>
+
+  <!-- QUIZ -->
+  <section id="view-quiz" class="view">
+    <div id="quiz" class="quiz"></div>
+  </section>
+
+  <!-- BROWSE -->
+  <section id="view-browse" class="view">
+    <div class="browse-layout">
+      <aside class="filters" id="filters">
+        <div class="filters-head">
+          <h2>Filters</h2>
+          <span><button class="link" id="resetFilters">Reset</button> <button class="btn gold small mobile-only" id="closeFilters">Done</button></span>
+        </div>
+        <input type="search" id="q" placeholder="Search title or keyword…" autocomplete="off">
+        <div class="fgroup"><h3>Mood</h3><div class="chips" id="fMood"></div></div>
+        <div class="fgroup"><h3>Genre <small>(any of)</small></h3><div class="chips" id="fGenre"></div></div>
+        <div class="fgroup"><h3>Runtime</h3><div class="chips" id="fRuntime"></div></div>
+        <div class="fgroup"><h3>Era</h3><div class="chips" id="fDecade"></div>
+          <div class="range2">
+            <label>From <input type="number" id="yFrom" min="1970" max="2026"></label>
+            <label>To <input type="number" id="yTo" min="1970" max="2026"></label>
+          </div>
+        </div>
+        <div class="fgroup"><h3>Min IMDb rating <output id="ratingOut">any</output></h3>
+          <input type="range" id="minRating" min="6" max="9" step="0.1" value="6">
+        </div>
+        <div class="fgroup"><h3>Streaming (UK)</h3><div class="chips" id="fServices"></div>
+          <label class="toggle"><input type="checkbox" id="onlyMine"> <span>Only show titles on these</span></label>
+          <p class="tiny muted">Availability is approximate &amp; changes often — tap “Check where to watch” to confirm.</p>
+        </div>
+        <label class="toggle"><input type="checkbox" id="hideSeen" checked> <span>Hide films I've marked seen</span></label>
+      </aside>
+      <div class="results-wrap">
+        <div class="results-bar">
+          <button class="btn ghost small mobile-only" id="toggleFilters">☰ Filters</button>
+          <span id="resultCount" class="muted"></span>
+          <select id="sort">
+            <option value="match">Best match</option>
+            <option value="rating">Highest rated</option>
+            <option value="new">Newest</option>
+            <option value="old">Oldest</option>
+            <option value="short">Shortest</option>
+            <option value="az">A–Z</option>
+          </select>
+          <button class="btn gold" id="surpriseBtn">🎲 Surprise me</button>
+        </div>
+        <div id="activeChips" class="active-chips"></div>
+        <div id="results" class="grid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SAVED -->
+  <section id="view-saved" class="view">
+    <div class="saved-tabs">
+      <button class="chip on" data-list="watch">📌 Watchlist</button>
+      <button class="chip" data-list="fav">♥ Favourites</button>
+      <button class="chip" data-list="seen">✓ Seen</button>
+    </div>
+    <div class="row-head"><span id="savedInfo" class="muted"></span><button class="btn gold small" id="savedSurprise">🎲 Pick from this list</button></div>
+    <div id="savedGrid" class="grid"></div>
+  </section>
+</main>
+
+<footer class="foot muted tiny">
+  Curated offline dataset of <span id="nFilms"></span> films · ratings are approximate IMDb scores · UK streaming tags are approximate.
+  Works fully offline. Optional TMDB posters in ⚙︎ settings.
+</footer>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card" role="dialog" aria-modal="true"><button class="icon-btn close" data-close aria-label="Close">✕</button><div id="modalBody"></div></div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
