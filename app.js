@@ -12,7 +12,11 @@ const hash = s => { let h = 2166136261; for (const c of String(s)) { h ^= c.char
 const listJoin = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' & ' + a[a.length - 1];
 const ico = id => `<svg><use href="#i-${id}"/></svg>`;
 const IMG = 'https://image.tmdb.org/t/p/';
-let toastT; function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2400); }
+let toastT; function toast(m, action){ // action: { label, run } adds a tappable button (e.g. Retry) and keeps the toast up longer
+  const t = $('#toast'); t.textContent = m; t.classList.toggle('has-act', !!action);
+  if (action) { const b = document.createElement('button'); b.className = 'toast-act'; b.type = 'button'; b.textContent = action.label;
+    b.onclick = ev => { ev.stopPropagation(); t.classList.remove('show'); action.run(); }; t.appendChild(b); }
+  t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), action ? 7000 : 2400); }
 
 const RUNTIMES = { short:{label:'Under 90 min', test:r=>r<90}, mid:{label:'90–120 min', test:r=>r>=90&&r<=120}, long:{label:'2h+', test:r=>r>120} };
 const DECADES = { '70s':[1900,1979,'70s & earlier'], '80s':[1980,1989,'80s'], '90s':[1990,1999,'90s'], '00s':[2000,2009,'2000s'], '10s':[2010,2019,'2010s'], '20s':[2020,2099,'2020s'] };
@@ -88,6 +92,7 @@ function toggleList(list, id){
   save(); recomputeProfile();
   const msgs = { fav:['Added to favourites','Removed from favourites'], watch:['Added to watchlist','Removed from watchlist'], seen:['Marked as seen','Unmarked as seen'] };
   toast(`${i < 0 ? msgs[list][0] : msgs[list][1]}: ${f ? f.t : ''}`); refreshAll();
+  if (list === 'watch') plexSync(id, i < 0);
 }
 /* One-way add (never toggles off): used by result cards that dismiss the film. No re-render here; the caller does it after the exit animation. */
 function addToList(list, id){
@@ -97,6 +102,7 @@ function addToList(list, id){
   save(); recomputeProfile();
   const t = f ? f.t : '';
   toast(list === 'watch' ? (already ? `Already on your watchlist: ${t}` : `Added to watchlist: ${t}`) : `Marked as seen: ${t}`);
+  if (list === 'watch') plexSync(id, true);
 }
 function feedback(type, id){
   const f = getM(id); if (!f) return;
@@ -662,13 +668,25 @@ function updatePlexBits(){
     if (b.classList.contains('starbtn')) { b.setAttribute('aria-label', on ? 'Remove from Plex watchlist' : 'Add to Plex watchlist'); b.title = on ? 'On your Plex watchlist' : 'Add to Plex watchlist'; }
     else { const sp = $('span', b); if (sp) sp.textContent = on ? 'On Plex watchlist' : 'Add to Plex watchlist'; } });
 }
-async function togglePlexWL(id, btn){
-  const f = getM(id); if (!f || !f.tmdb || !P.signedIn) return;
-  const on = !P.onWatchlist(f.tmdb);
-  $$('[data-act="plexwl"]').forEach(b => { const c = b.closest('[data-id]'); if (c && c.dataset.id === id) b.disabled = true; });
-  try { await P.setWatchlist(f.tmdb, on); toast(on ? `Added to your Plex watchlist: ${f.t}` : `Removed from your Plex watchlist: ${f.t}`); }
-  catch (e) { toast(e.status === 404 ? `Plex doesn't know “${f.t}”` : 'Plex watchlist unavailable right now'); }
-  finally { $$('[data-act="plexwl"]').forEach(b => b.disabled = false); updatePlexBits(); renderSettingsPlex(); }
+function togglePlexWL(id){ const f = getM(id); if (f && P.signedIn) plexSync(id, !P.onWatchlist(f.tmdb), true); }
+/* Mirror a Watchlist action to the Plex watchlist when signed in. Toasts success, or a clear error with Retry. */
+const plexBusy = new Set();
+async function plexSync(id, on, explicit = false){
+  const f = getM(id); if (!f || !P.signedIn) return;
+  if (!f.tmdb && !f.imdb) { if (explicit) toast(`Can't match “${f.t}” on Plex (no TMDB/IMDb id)`); return; }
+  const k = id + ':' + on; if (plexBusy.has(k)) return; plexBusy.add(k);
+  const btns = () => $$('[data-act="plexwl"]').filter(b => { const c = b.closest('[data-id]'); return c && c.dataset.id === id; });
+  btns().forEach(b => b.disabled = true);
+  try {
+    await P.setWatchlist({ tmdb: f.tmdb, imdb: f.imdb, t: f.t, y: f.y }, on);
+    toast(on ? `Added to your Plex watchlist: ${f.t}` : `Removed from your Plex watchlist: ${f.t}`);
+  } catch (e) {
+    const retry = { label: 'Retry', run: () => plexSync(id, on, explicit) };
+    if (e.status === 401 || !P.signedIn) toast('Plex sign-in expired: sign in again in Settings', { label: 'Settings', run: () => { closeModal(); $('#settingsBtn').click(); } });
+    else if (e.status === 404) toast(`Couldn't find “${f.t}” on Plex, so it wasn't added to your Plex watchlist`, retry);
+    else toast(`Plex watchlist ${on ? 'add' : 'remove'} failed (${e.status ? 'HTTP ' + e.status : e.name === 'AbortError' ? 'timed out' : 'network error'}): ${f.t}`, retry);
+    if (typeof console !== 'undefined') console.warn('Plex watchlist', on ? 'add' : 'remove', 'failed:', e.status || e.name || 'error');
+  } finally { plexBusy.delete(k); btns().forEach(b => b.disabled = false); updatePlexBits(); renderSettingsPlex(); }
 }
 const forwardUrl = () => location.origin + location.pathname + '#plexauth';
 async function plexSignIn(){

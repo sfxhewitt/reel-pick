@@ -88,3 +88,23 @@ test('library: picks reachable https connection, builds tmdb/imdb sets, falls ba
   down = true; await p.refreshLibrary(true);
   assert.ok(p.libraryReady); assert.strictEqual(p.status.lib, 'stale');
 });
+test('ratingKeyFor falls back: tmdb guid -> imdb guid -> search verified by Guids', async () => {
+  const st = mem(); st.setItem('reelpick.plex.auth', JSON.stringify({ token: 'T' })); const calls = [];
+  const fetch = async (url, o) => { const u = url.replace('https://discover.provider.plex.tv', ''); calls.push(o.method + ' ' + u);
+    if (u.includes('/matches') && u.includes('imdb%3A%2F%2Ftt0113277')) return res({ MediaContainer: { Metadata: [{ ratingKey: 'rk-heat' }] } });
+    if (u.includes('/matches')) return res({ MediaContainer: { size: 0 } });
+    if (u.startsWith('/library/search')) return res({ MediaContainer: { SearchResults: [{ SearchResult: [
+      { Metadata: { ratingKey: 'rk-other', type: 'movie', title: 'Solaris', year: 1972 } },
+      { Metadata: { ratingKey: 'rk-sol', type: 'movie', title: 'Solaris', year: 2002 } }] }] } });
+    if (u.startsWith('/library/metadata/rk-sol')) return res({ MediaContainer: { Metadata: [{ Guid: [{ id: 'tmdb://2103' }] }] } });
+    if (u.startsWith('/library/metadata/')) return res({ MediaContainer: { Metadata: [{ Guid: [{ id: 'tmdb://1' }] }] } });
+    if (u.includes('/actions/')) return res({});
+    return res({}, 404); };
+  const p = PC.create({ storage: st, fetch });
+  assert.strictEqual(await p.ratingKeyFor({ tmdb: 949, imdb: 'tt0113277', t: 'Heat', y: 1995 }), 'rk-heat');
+  assert.strictEqual(await p.ratingKeyFor({ tmdb: 2103, t: 'Solaris', y: 2002 }), 'rk-sol');
+  await p.setWatchlist({ tmdb: 2103, t: 'Solaris', y: 2002 }, true); assert.ok(p.onWatchlist(2103));
+  assert.ok(calls.includes('PUT /actions/addToWatchlist?ratingKey=rk-sol'));
+  await assert.rejects(p.ratingKeyFor({ tmdb: 5, t: 'Nope', y: 1900 }), e => e.status === 404);
+  await assert.rejects(PC.create({ storage: mem(), fetch }).setWatchlist(1, true), e => e.status === 401);
+});

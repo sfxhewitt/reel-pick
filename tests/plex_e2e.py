@@ -57,6 +57,7 @@ class Plex:
             if u.path == "/library/metadata/matches":
                 t = int(q["guid"][0].split("://")[1]); return await J({"MediaContainer": {"Metadata": [{"ratingKey": f"rk-{t}", "type": "movie"}]}})
             if u.path.startswith("/actions/") and m == "PUT":
+                if getattr(self, "fail_actions", 0) > 0: self.fail_actions -= 1; return await J({"error": "boom"}, 503)
                 t = int(q["ratingKey"][0][3:]); (self.wl.add if "add" in u.path else self.wl.discard)(t); return await J({})
         if u.netloc.endswith(".plex.direct:32400") or u.netloc.endswith(".plex.direct:8443"):
             if not self.reachable or u.netloc.startswith("192-168"): return await route.abort("connectionrefused")   # local LAN not reachable from the test box
@@ -175,6 +176,45 @@ async def main():
         await cb.click(); await pg.wait_for_timeout(600)
         on1 = await cb.get_attribute("aria-pressed"); await cb.click(); await pg.wait_for_timeout(600); on2 = await cb.get_attribute("aria-pressed")
         check("card button toggles add/remove", on1 == "true" and on2 == "false" and cid2 not in plex.wl, [on1, on2])
+
+        # ---------- the main Watchlist buttons (pin / 'Watchlist') also write to Plex ----------
+        async def wl_put(t, add=True, timeout=8000):
+            want = ("PUT", f"https://discover.provider.plex.tv/actions/{'add' if add else 'remove'}FromWatchlist?ratingKey=rk-{t}".replace("addFrom", "addTo"))
+            for _ in range(timeout // 100):
+                if want in plex.calls: return True
+                await pg.wait_for_timeout(100)
+            return False
+        pin = pg.locator("#results > .card [data-act=watch]").nth(3); id3 = await pin.evaluate("b=>b.closest('[data-id]').dataset.id"); t3 = await pg.evaluate("i=>ReelPick.getM(i).tmdb", id3)
+        await pin.click(); ok_add = await wl_put(t3) and t3 in plex.wl
+        toast_txt = await pg.inner_text("#toast")
+        await pg.wait_for_timeout(300); await pg.locator(f"#results > .card[data-id='{id3}'] [data-act=watch]").click(); ok_rm = await wl_put(t3, False) and t3 not in plex.wl
+        check("Browse pin (Watchlist) adds to Plex watchlist + toast, second tap removes", ok_add and ok_rm and "plex watchlist" in toast_txt.lower(), toast_txt)
+        await pg.locator("#results > .card [data-open]").nth(4).first.click(); await pg.wait_for_selector("#modal .btn[data-act=watch]")
+        t4 = await pg.evaluate("ReelPick.getM(document.querySelector('#modal [data-id]').dataset.id).tmdb")
+        await pg.click("#modal .btn[data-act=watch]")
+        check("detail 'Watchlist' button adds to Plex watchlist", await wl_put(t4) and t4 in plex.wl)
+        await close_sheet(pg)
+        plex.fail_actions = 1
+        pin5 = pg.locator("#results > .card [data-act=watch]").nth(5); t5 = await pin5.evaluate("b=>ReelPick.getM(b.closest('[data-id]').dataset.id).tmdb")
+        await pin5.click(); await pg.wait_for_selector("#toast .toast-act", timeout=8000)
+        err = await pg.inner_text("#toast")
+        await pg.click("#toast .toast-act")
+        check("Plex failure shows a clear error with Retry; Retry adds it", "failed" in err.lower() and "503" in err and await wl_put(t5) and t5 in plex.wl, err)
+        await pg.click("nav.tabs button[data-view=tonight]"); await pg.wait_for_timeout(400)
+        hb = pg.locator("#hero [data-act=watch]").first; th = await hb.evaluate("b=>ReelPick.getM(b.closest('[data-id]').dataset.id).tmdb")
+        if th in plex.wl: await hb.click(); await pg.wait_for_timeout(600); hb = pg.locator("#hero [data-act=watch]").first
+        await hb.click()
+        check("Tonight hero 'Watchlist' adds to Plex watchlist", await wl_put(th) and th in plex.wl)
+        await pg.click("nav.tabs button[data-view=quiz]")
+        if await pg.locator("#quiz .opt[data-v='stressed']").count() == 0 and await pg.locator("#quiz .pick").count() == 0:
+            await pg.locator("#quiz button", has_text="Start").first.click()
+        for v in ["stressed", "change", "solo", "mid", "*"]: await pg.click(f"#quiz .opt[data-v='{v}']")
+        await pg.click("#qNext"); await pg.click("#quiz .opt[data-v=classic]"); await pg.wait_for_selector("#quiz .pick"); await pg.wait_for_timeout(800)
+        qp = pg.locator("#quiz .pick").first; qid = await qp.get_attribute("data-id"); tq = await pg.evaluate("i=>ReelPick.getM(i).tmdb", qid)
+        await qp.locator("[data-act=watch]").click(); await pg.wait_for_timeout(700)
+        gone = await pg.locator(f"#quiz .pick[data-id='{qid}']").count() == 0
+        check("quiz 'Watchlist' adds to Plex watchlist and the card is still removed", await wl_put(tq) and tq in plex.wl and gone, [gone])
+        await pg.click("nav.tabs button[data-view=browse]"); await pg.wait_for_selector("#results .card"); await pg.wait_for_timeout(500)
 
         # ---------- filters ----------
         await pg.click("#fPlex [data-pf=only]"); await pg.wait_for_timeout(500)

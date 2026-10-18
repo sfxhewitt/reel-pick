@@ -154,16 +154,51 @@
       if (wl.tmdb[tmdbId]) return true;
       const rk = match[tmdbId]; return !!(rk && wl.rks.includes(rk));
     }
-    async function ratingKeyFor(tmdbId) {
-      if (match[tmdbId]) return match[tmdbId];
-      const j = await req(`${DISCOVER}/library/metadata/matches?type=1&guid=${encodeURIComponent('tmdb://' + tmdbId)}`);
-      const m = ((j.MediaContainer || {}).Metadata || [])[0];
-      if (!m || !m.ratingKey) { const e = new Error('Not found on Plex'); e.status = 404; throw e; }
-      match[tmdbId] = String(m.ratingKey); put(K.match, match); return match[tmdbId];
+    /* Resolve a film to a Plex Discover ratingKey. Accepts a TMDB id or a film { tmdb, imdb, t, y }.
+       1) cached / watchlist hit, 2) /library/metadata/matches by tmdb:// guid, 3) by imdb:// guid,
+       4) /library/search by title, candidates verified via /library/metadata/{rk} Guids (tmdb/imdb), else exact title+year. */
+    const norm = s => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '');
+    async function ratingKeyFor(film) {
+      const f = typeof film === 'object' && film ? film : { tmdb: film };
+      const tmdbId = f.tmdb, key = tmdbId || f.imdb;
+      if (key && match[key]) return match[key];
+      if (tmdbId && wl && wl.tmdb[tmdbId]) return wl.tmdb[tmdbId];
+      const remember = rk => { rk = String(rk); if (key) { match[key] = rk; put(K.match, match); } return rk; };
+      const guids = [tmdbId && 'tmdb://' + tmdbId, f.imdb && 'imdb://' + f.imdb].filter(Boolean);
+      let lastErr = null;
+      for (const g of guids) {
+        try {
+          const j = await req(`${DISCOVER}/library/metadata/matches?type=1&guid=${encodeURIComponent(g)}`);
+          const m = ((j.MediaContainer || {}).Metadata || []).find(x => x && x.ratingKey);
+          if (m) return remember(m.ratingKey);
+        } catch (e) { if (e.status === 401) throw e; if (e.status !== 404 && e.status !== 400) lastErr = e; }
+      }
+      if (f.t) {
+        try {
+          const j = await req(`${DISCOVER}/library/search?query=${encodeURIComponent(f.t)}&searchTypes=movies&searchProviders=discover&includeMetadata=1&includeGuids=1&limit=10`);
+          const cands = [];
+          for (const r of ((j.MediaContainer || {}).SearchResults || [])) for (const x of (r.SearchResult || [])) { const m = x.Metadata; if (m && m.ratingKey && (!m.type || m.type === 'movie')) cands.push(m); }
+          const near = cands.filter(m => !f.y || !m.year || Math.abs(+m.year - +f.y) <= 1).slice(0, 4);
+          const hit = ids => (tmdbId && ids.tmdb.includes(+tmdbId)) || (f.imdb && ids.imdb.includes(f.imdb));
+          for (const m of near) {
+            let ids = idsFromGuids(m);
+            if (!ids.tmdb.length && !ids.imdb.length) {
+              try { const d = await req(`${DISCOVER}/library/metadata/${encodeURIComponent(m.ratingKey)}?includeGuids=1`); ids = idsFromGuids(((d.MediaContainer || {}).Metadata || [])[0] || {}); }
+              catch (e) { if (e.status === 401) throw e; }
+            }
+            if (hit(ids)) return remember(m.ratingKey);
+          }
+          const exact = near.filter(m => norm(m.title) === norm(f.t) && (!f.y || +m.year === +f.y));
+          if (exact.length === 1) return remember(exact[0].ratingKey);
+        } catch (e) { if (e.status === 401) throw e; lastErr = e; }
+      }
+      if (lastErr) throw lastErr;
+      const e = new Error('Not found on Plex'); e.status = 404; throw e;
     }
-    async function setWatchlist(tmdbId, on) {
-      if (!auth) throw new Error('Not signed in');
-      const rk = (wl && wl.tmdb[tmdbId]) || await ratingKeyFor(tmdbId);
+    async function setWatchlist(film, on) {
+      if (!auth) { const e = new Error('Not signed in'); e.status = 401; throw e; }
+      const tmdbId = typeof film === 'object' && film ? (film.tmdb || film.imdb) : film;
+      const rk = await ratingKeyFor(film);
       await req(`${DISCOVER}/actions/${on ? 'addToWatchlist' : 'removeFromWatchlist'}?ratingKey=${encodeURIComponent(rk)}`, { method: 'PUT' });
       wl = wl || { t: now(), tmdb: {}, rks: [], count: 0 };
       if (on) { wl.tmdb[tmdbId] = rk; if (!wl.rks.includes(rk)) wl.rks.push(rk); }
