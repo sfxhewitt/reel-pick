@@ -116,10 +116,10 @@
     const tf = targetFit(f, ctx.target);
     const wr = bayes(f, ctx.bayes); const q = Math.max(0, Math.min(1, (wr - 5) / 3.5));
     const ps = profileSim(f, ctx.profile);
-    const svc = ctx.services && ctx.services.size && f.s && f.s.some(s=>ctx.services.has(s)) ? 1 : 0;
+    const svc = 0;
     const qualW = ctx.prefer === 'classic' ? 0.4 : ctx.prefer === 'gem' ? 0.1 : 0.25;
     let gem = 0; if (ctx.prefer === 'gem') gem = (f.votes||0) < 3000 && wr > 6.8 ? 0.15 : 0;
-    const score = (ctx.target ? 0.5 : 0.15)*tf.fit + qualW*q + (ctx.profile ? 0.2 : 0)*((ps+1)/2) + 0.1*svc + gem;
+    const score = (ctx.target ? 0.5 : 0.15)*tf.fit + qualW*q + (ctx.profile ? 0.2 : 0)*((ps+1)/2) + gem;
     return { f, score, fit: tf, wr, ps, svc };
   }
   function rank(films, ctx){ return films.map(f => relevance(f, ctx)).sort((a,b)=>b.score-a.score); }
@@ -160,7 +160,6 @@
       else if (r.ps > 0.35) parts.push('close to your taste profile');
     }
     parts.push(`${r.wr.toFixed(1)} weighted rating from ${fmtVotes(r.f.votes)} votes`);
-    if (r.svc) parts.push('on your services');
     let s = parts.join('; '); s = s.charAt(0).toUpperCase() + s.slice(1) + '.';
     return s;
   }

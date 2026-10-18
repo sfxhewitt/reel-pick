@@ -1,10 +1,10 @@
 /* Reel Pick: movie chooser. Static, no build step.
    Data: data/catalog.json (10k films with build-time affect scores) -> fallback data.js (170 curated films).
-   Live TMDB (tmdb.js): UK watch providers, backdrops/cast/trailers, search + discover beyond the catalogue.
+   Live TMDB (tmdb.js): backdrops/cast/trailers, runtimes, search + discover beyond the catalogue. No streaming-provider data.
    Recommender: reco.js. Suggestion rules (30-day cooldown, 3 strikes, not interested): rules.js. */
 (() => {
 'use strict';
-const T = window.TMDB, R = window.Reco, SERVICES = T.SERVICES;
+const T = window.TMDB, R = window.Reco;
 const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtRun = r => r ? `${Math.floor(r/60)}h ${String(r%60).padStart(2,'0')}m` : '';
@@ -24,9 +24,10 @@ const MOOD_COL = { grass:'var(--grass)', fire:'var(--fire)', water:'var(--water)
 
 /* ---------------- persistence ---------------- */
 const LS_KEY = 'reelpick.v2';
-const store = Object.assign({ fav:[], watch:[], seen:[], services:[], tmdbKey:'', snap:{}, fb:[], hero:null, row:null }, (() => {
+const store = Object.assign({ fav:[], watch:[], seen:[], tmdbKey:'', snap:{}, fb:[], hero:null, row:null, genrePrefs:{ exclude:[], require:[] } }, (() => {
   try { const v2 = JSON.parse(localStorage.getItem(LS_KEY)); if (v2) return v2; const v1 = JSON.parse(localStorage.getItem('reelpick.v1')) || {};
-    return { fav:v1.fav||[], watch:v1.watch||[], seen:v1.seen||[], services:v1.services||[], tmdbKey:v1.tmdbKey||'' }; } catch { return {}; } })());
+    return { fav:v1.fav||[], watch:v1.watch||[], seen:v1.seen||[], tmdbKey:v1.tmdbKey||'' }; } catch { return {}; } })());
+delete store.services; if (!store.genrePrefs) store.genrePrefs = { exclude:[], require:[] };
 const save = () => { try { if (store.fb.length > 400) store.fb = store.fb.slice(-400); localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch {} updateSavedCount(); };
 const rules = window.ReelRules.create();
 const has = (list, id) => store[list].includes(id);
@@ -42,17 +43,17 @@ function fromCatalog(j){
     const d = {}; D.forEach((k, i) => d[k] = dims[i] / 100);
     const q = { excited:quad[0]/100, content:quad[1]/100, tense:quad[2]/100, sad:quad[3]/100 };
     return finish({ id:'tmdb-'+id, tmdb:id, src:'cat', t, y, r:run, i:rating, votes, g:gids.map(x=>G[x]).filter(Boolean), kw:kix.map(x=>K[x]),
-      poster: poster ? IMG+'w342'+poster : '', d:'', dims:d, quad:q, s:svc ? svc.split('') : [], sBuilt:true, cert, imdb, jev:!!jev });
+      poster: poster ? IMG+'w342'+poster : '', d:'', dims:d, quad:q, cert, imdb, jev:!!jev });
   });
 }
 function fromLocal(){
   const slug = s => s.toLowerCase().normalize('NFD').replace(/[^\w]+/g,'-').replace(/^-|-$/g,'');
   return (window.MOVIES_RAW||[]).map(([t,y,r,i,g,m,s,d]) => { const gs = g.split(' '); const h = R.heuristicDims(gs);
-    return finish({ id:slug(t+'-'+y), src:'local', t, y, r, i, votes:20000, g:gs, kw:[], poster:'', d, dims:h.dims, quad:h.quad, s:s?s.split(' '):[], sBuilt:true }); });
+    return finish({ id:slug(t+'-'+y), src:'local', t, y, r, i, votes:20000, g:gs, kw:[], poster:'', d, dims:h.dims, quad:h.quad }); });
 }
 function liveFilm(m){ // TMDB live result -> recommender-ready film (heuristic affect from genres)
   const ex = BY_ID.get(m.id); if (ex) { if (!ex.poster) ex.poster = m.poster; return ex; }
-  const h = R.heuristicDims(m.g); const f = finish(Object.assign(m, { src:'live', kw:[], dims:h.dims, quad:h.quad, s:m.s || null }));
+  const h = R.heuristicDims(m.g); const f = finish(Object.assign(m, { src:'live', kw:[], dims:h.dims, quad:h.quad }));
   f.tf = TFIDF ? TFIDF.vec(f) : null; BY_ID.set(f.id, f); return f;
 }
 let TFIDF = null;
@@ -71,7 +72,7 @@ function loadOverviews(){
   fetch('data/overviews.json').then(r => r.ok ? r.json() : {}).then(o => { for (const f of FILMS) if (!f.d) f.d = o[f.tmdb] || ''; refreshAll(true); }).catch(() => {});
 }
 const getM = id => BY_ID.get(id);
-function snap(f){ if (f.src === 'cat' || f.src === 'local') return; store.snap[f.id] = { id:f.id, tmdb:f.tmdb, t:f.t, y:f.y, r:f.r, i:f.i, votes:f.votes, g:f.g, d:f.d, poster:f.poster, s:f.s }; }
+function snap(f){ if (f.src === 'cat' || f.src === 'local') return; store.snap[f.id] = { id:f.id, tmdb:f.tmdb, t:f.t, y:f.y, r:f.r, i:f.i, votes:f.votes, g:f.g, d:f.d, poster:f.poster }; }
 function recomputeProfile(){
   const ev = [...store.fb, ...store.fav.map(id=>({id,type:'fav'})), ...store.watch.map(id=>({id,type:'watch'}))];
   PROFILE = R.rocchio(ev, getM);
@@ -100,12 +101,45 @@ function feedback(type, id){
 const fbOf = id => { const e = [...store.fb].reverse().find(e => e.id === id && (e.type === 'like' || e.type === 'dislike')); return e ? e.type : null; };
 
 /* ---------------- recommendation context & candidate pools ---------------- */
-const servicesSet = () => new Set(store.services);
-function baseCtx(extra = {}){ return Object.assign({ bayes:BAYES, profile:PROFILE, services:servicesSet() }, extra); }
-function candidates({ onlyMine = false, svcs = null, runtime = null, avoid = null, minVotes = 0, filter = null, allowCooldown = false } = {}){
-  const S = svcs || servicesSet();
+/* Saved genre preferences: exclusions (and optional requirements) are HARD filters everywhere. */
+function genreOK(f){
+  const gp = store.genrePrefs; if (!gp) return true;
+  if (gp.exclude.length && f.g.some(g => gp.exclude.includes(g))) return false;
+  if (gp.require.length && !f.g.some(g => gp.require.includes(g))) return false;
+  return true;
+}
+const gpKey = () => store.genrePrefs.exclude.join(',') + '|' + store.genrePrefs.require.join(',');
+function allGenres(){ return [...new Set(FILMS.flatMap(f => f.g))].sort(); }
+/* state: 0 neutral, 1 exclude, 2 require */
+function genreState(g){ const gp = store.genrePrefs; return gp.exclude.includes(g) ? 1 : gp.require.includes(g) ? 2 : 0; }
+function setGenre(g, st){
+  const gp = store.genrePrefs; gp.exclude = gp.exclude.filter(x => x !== g); gp.require = gp.require.filter(x => x !== g);
+  if (st === 1) gp.exclude.push(g); if (st === 2) gp.require.push(g);
+  store.hero = null; store.row = null; save();
+}
+/* Tri-state genre chips: tap = exclude (the prominent action), tap again or long-press = require, third tap = clear. */
+function genreControl(el, onChange){
+  const draw = () => {
+    const gp = store.genrePrefs;
+    el.innerHTML = `<div class="gsum muted">${gp.exclude.length ? `Never: <b class="gx">${esc(gp.exclude.join(', '))}</b>` : 'Nothing ruled out yet.'}${gp.require.length ? ` · Must be: <b class="gr">${esc(gp.require.join(' or '))}</b>` : ''}</div>
+      <div class="chips wrap gchips">${allGenres().map(g => { const st = genreState(g); return `<button class="chip gchip" data-g="${esc(g)}" data-st="${st}" aria-pressed="${st > 0}" aria-label="${esc(g)}: ${['neutral', 'excluded', 'required'][st]}">${st === 1 ? '✕ ' : st === 2 ? '+ ' : ''}${esc(g)}</button>`; }).join('')}</div>
+      ${gp.exclude.length || gp.require.length ? '<button class="link" data-gclear>Clear genre preferences</button>' : ''}`;
+    $$('.gchip', el).forEach(b => {
+      let timer = null, long = false;
+      const g = b.dataset.g;
+      b.addEventListener('pointerdown', () => { long = false; timer = setTimeout(() => { long = true; setGenre(g, 2); draw(); onChange(); }, 500); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => clearTimeout(timer)));
+      b.addEventListener('contextmenu', e => e.preventDefault());
+      b.addEventListener('click', () => { if (long) { long = false; return; } setGenre(g, (genreState(g) + 1) % 3); draw(); onChange(); });
+    });
+    const c = $('[data-gclear]', el); if (c) c.onclick = () => { store.genrePrefs = { exclude: [], require: [] }; store.hero = null; store.row = null; save(); draw(); onChange(); };
+  };
+  draw();
+}
+function baseCtx(extra = {}){ return Object.assign({ bayes:BAYES, profile:PROFILE }, extra); }
+function candidates({ runtime = null, avoid = null, minVotes = 0, filter = null, allowCooldown = false } = {}){
   return FILMS.filter(f => !has('seen', f.id) && (allowCooldown ? !rules.banInfo(f.id) && !rules.session.has(f.id) : rules.eligible(f.id))
-    && (!onlyMine || !S.size || (f.s && f.s.some(s => S.has(s))))
+    && genreOK(f)
     && (!runtime || [...runtime].some(k => RUNTIMES[k].test(f.r)))
     && (!avoid || avoid(f) === false) && (f.votes || 0) >= minVotes && (!filter || filter(f)));
 }
@@ -116,13 +150,6 @@ function posterHTML(f){
   const h = hash(f.t), h1 = h % 360, h2 = (h1 + 60 + (h >> 8) % 90) % 360;
   const img = f.poster ? `<img src="${esc(f.poster)}" alt="${esc(f.t)} poster" loading="lazy" onerror="this.remove()">` : '';
   return `<div class="poster" data-poster="${esc(f.id)}" style="--p1:hsl(${h1} 90% 55%);--p2:hsl(${h2} 90% 50%)"><div class="art"><div class="ptitle">${esc(f.t)}</div><div class="pyear">${f.y||''}</div></div>${img}</div>`;
-}
-function badgesHTML(f){
-  if (f.s == null) return `<span class="badge">UK · checking…</span>`;
-  const mine = servicesSet();
-  const live = f.live ? '' : (f.sBuilt && SOURCE === 'catalog' ? ' title="UK availability at catalogue build; refreshed live when online"' : '');
-  if (!f.s.length) return `<span class="badge"${live}>${f.wp && (f.wp.rent.length || f.wp.buy.length) ? 'Rent / buy' : 'Not on UK subs'}</span>`;
-  return f.s.filter(s => SERVICES[s]).map(s => `<span class="badge svc ${mine.has(s) ? 'ok' : ''}" style="--svc:${SERVICES[s].color}"${live}>${SERVICES[s].short}</span>`).join('') + (f.live ? '<span class="badge live" title="Live from TMDB/JustWatch">Live</span>' : '');
 }
 function moodBadges(f){ return (f.m || []).slice(0, 2).map(k => `<span class="badge mtag" style="--mc:${MOOD_COL[R.MOODS[k].c]}">${R.MOODS[k].label}</span>`).join(''); }
 const HEART = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-9.2-9C1.4 7.9 3.4 4.5 6.8 4.5c2 0 3.4 1.1 4.2 2.4h2c.8-1.3 2.2-2.4 4.2-2.4 3.4 0 5.4 3.4 4 6.5C19 15.6 12 20 12 20z"/></svg>';
@@ -139,18 +166,15 @@ function cardHTML(f, rr, { mini = false, ctx = null, match = false, maxScore = 1
       ${mini ? '' : `<div class="tags">${moodBadges(f)}${f.g.slice(0, 2).map(g => `<span class="badge">${esc(g)}</span>`).join('')}</div>
       ${f.d ? `<p class="syn">${esc(f.d)}</p>` : ''}
       ${rr && ctx ? `<div class="reason">${esc(R.why(rr, ctx))}</div>` : ''}`}
-      <div class="badges" data-badges="${esc(f.id)}">${badgesHTML(f)}</div>
     </div></article>`;
 }
 function updateBits(f){
-  $$(`[data-badges="${CSS.escape(f.id)}"]`).forEach(el => el.innerHTML = badgesHTML(f));
   $$(`[data-run="${CSS.escape(f.id)}"]`).forEach(el => el.textContent = fmtRun(f.r));
   if (f.poster) $$(`[data-poster="${CSS.escape(f.id)}"]`).forEach(el => { if (!el.querySelector('img')) el.insertAdjacentHTML('beforeend', `<img src="${esc(f.poster)}" alt="" loading="lazy" onerror="this.remove()">`); });
-  if (B.onlyLiveFilter && F.onlyMine && F.services.size && f.s) $$(`#results [data-id="${CSS.escape(f.id)}"]`).forEach(el => el.classList.toggle('gone', !f.s.some(s => F.services.has(s))));
 }
-function afterRender(root){
+function afterRender(root){ // live-search/discover results lack runtime: fetch it (no provider data is requested)
   if (!LIVE) return;
-  $$('[data-badges]', root).forEach(el => { const f = getM(el.dataset.badges); if (f && !f.live) T.enqueue(f, m => { m.live = true; if (store.snap[m.id]) snap(m); updateBits(m); }); });
+  $$('[data-run]', root).forEach(el => { const f = getM(el.dataset.run); if (f && f.src === 'live' && !f.r && !f._rq) { f._rq = 1; T.enqueue(f, m => { if (store.snap[m.id]) snap(m); updateBits(m); }); } });
 }
 
 /* ---------------- global clicks ---------------- */
@@ -171,12 +195,33 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal
 
 /* ---------------- modal / detail ---------------- */
 let lastFocus = null, modalState = null, picker = null;
-function openModal(html, detail = false){
+/* Sheets: one visible Close control in a sticky bar below the safe area; Esc, browser/OS back and swipe-down also close. */
+let ignorePop = false, pendingPush = false;
+/* One history entry per open sheet so iOS/Android back closes it. If a close's history.back() is still in flight, defer the push. */
+function pushSheet(){ if (ignorePop) { pendingPush = true; return; } try { history.pushState({ rpModal: 1 }, '', '#' + curView); } catch {} }
+function openModal(html, detail = false, title = ''){
   const was = $('#modal').hidden; if (was) lastFocus = document.activeElement;
-  $('#modalBody').innerHTML = html; $('.modal-card').classList.toggle('is-detail', !!detail); $('#modal').hidden = false; document.body.style.overflow = 'hidden';
-  afterRender($('#modalBody')); if (was) requestAnimationFrame(() => $('.modal-card .close').focus({ preventScroll: true }));
+  $('#sheetTitle').textContent = title || (detail ? 'Film' : '');
+  $('#modalBody').innerHTML = html; $('.modal-card').classList.toggle('is-detail', !!detail); $('#modal').hidden = false; document.body.classList.add('sheet-open');
+  if (was) { $('.modal-card').scrollTop = 0; pushSheet(); }
+  afterRender($('#modalBody')); if (was) requestAnimationFrame(() => $('#sheetClose').focus({ preventScroll: true }));
 }
-function closeModal(){ if ($('#modal').hidden) return; $('#modal').hidden = true; document.body.style.overflow = ''; picker = null; modalState = null; if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true }); lastFocus = null; }
+function closeModal(viaHistory = false){
+  if ($('#modal').hidden) return; $('#modal').hidden = true; document.body.classList.remove('sheet-open'); $('.modal-card').style.transform = '';
+  picker = null; modalState = null;
+  if (!viaHistory && history.state && history.state.rpModal) { ignorePop = true; history.back(); }
+  if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true }); lastFocus = null;
+}
+window.addEventListener('popstate', () => {
+  if (ignorePop) { ignorePop = false; history.replaceState(null, '', '#' + curView); if (pendingPush) { pendingPush = false; if (!$('#modal').hidden) pushSheet(); } return; }
+  if (!$('#modal').hidden) closeModal(true);
+});
+(() => { // swipe down to close (from the sheet bar anywhere, or from the content when scrolled to the top)
+  const card = $('.modal-card'); let y0 = null, dy = 0;
+  card.addEventListener('touchstart', e => { if (card.scrollTop > 0 && !e.target.closest('.sheet-bar')) { y0 = null; return; } y0 = e.touches[0].clientY; dy = 0; }, { passive: true });
+  card.addEventListener('touchmove', e => { if (y0 == null) return; dy = e.touches[0].clientY - y0; if (dy > 0) card.style.transform = `translateY(${Math.min(dy, 300) * .6}px)`; }, { passive: true });
+  card.addEventListener('touchend', () => { if (y0 == null) return; if (dy > 90) closeModal(); else card.style.transform = ''; y0 = null; });
+})();
 document.addEventListener('keydown', e => {
   if (e.key !== 'Tab' || $('#modal').hidden) return;
   const f = $$('.modal-card button, .modal-card a[href], .modal-card input').filter(x => x.offsetParent); if (!f.length) return;
@@ -188,14 +233,6 @@ function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
   const onW = has('watch', f.id), onF = has('fav', f.id), onS = has('seen', f.id), fb = fbOf(f.id);
   const trailer = x.trailer || `https://www.youtube.com/results?search_query=${q}+trailer`;
   rr = rr || R.relevance(f, ctx || baseCtx());
-  const mine = servicesSet();
-  let svc;
-  if (f.wp && f.live) {
-    svc = f.wp.flat.length ? f.wp.flat.map(p => `<li class="dv-svc ${p.code && mine.has(p.code) ? 'own' : ''}">${p.logo ? `<img src="${esc(p.logo)}" alt="" loading="lazy" onerror="this.remove()">` : '<span class="dv-svc-dot"></span>'}<span><b>${esc(p.n)}</b><small>${p.kind}${p.code && mine.has(p.code) ? ' · yours' : ''}</small></span></li>`).join('')
-      : `<li class="dv-svc"><span class="dv-svc-dot"></span><span><b>Not on a UK subscription</b><small>Right now</small></span></li>`;
-    if (f.wp.rent.length || f.wp.buy.length) svc += `<li class="dv-rent muted">Rent or buy: ${esc(listJoin([...new Set([...f.wp.rent, ...f.wp.buy])].slice(0, 5)))}</li>`;
-  } else if (f.s && f.s.length) svc = f.s.filter(s=>SERVICES[s]).map(s => `<li class="dv-svc ${mine.has(s) ? 'own' : ''}" style="--svc:${SERVICES[s].color}"><span class="dv-svc-dot"></span><span><b>${SERVICES[s].name}</b><small>${SOURCE === 'catalog' ? 'At catalogue build' : 'Approximate'}</small></span></li>`).join('');
-  else svc = `<li class="dv-svc"><span class="dv-svc-dot"></span><span><b>${f.s == null ? 'Checking…' : 'Rent or buy'}</b><small>UK</small></span></li>`;
   const cast = x.cast && x.cast.length ? `<section class="dv-sec"><h4>Cast</h4><ul class="dv-cast">${x.cast.map(c => `<li><span class="dv-av">${c.p ? `<img src="${esc(c.p)}" alt="" loading="lazy" onerror="this.remove()">` : ''}<i>${esc(c.n.split(/\s+/).map(w=>w[0]).slice(0,2).join(''))}</i></span><b>${esc(c.n)}</b><small>${esc(c.c || '')}</small></li>`).join('')}</ul></section>` : '';
   const bars = DIM_BARS.map(([k, l]) => { const v = f.dims[k] ?? .5; return `<div class="bar"><span>${l}</span><i style="--v:${Math.round(v*100)}%"></i><b>${Math.round(v*100)}</b></div>`; }).join('');
   const flags = Object.entries(FLAGS).filter(([k]) => k !== 'romance').map(([k, v]) => v.test(f) ? `<span class="badge ok">${v.label}</span>` : '').join('') + (f.dims.violence >= .5 ? '<span class="badge bad">Violence</span>' : '') + (f.dims.scary >= .4 ? '<span class="badge bad">Scary</span>' : '');
@@ -213,7 +250,7 @@ function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
             <button class="iconbtn ${fb === 'dislike' ? 'on bad' : ''}" data-act="dislike" aria-pressed="${fb === 'dislike'}" aria-label="Dislike" title="Dislike: less like this">▼</button>
             <button class="iconbtn ${onF ? 'on fav' : ''}" data-act="fav" aria-pressed="${onF}" aria-label="Favourite" title="Favourite">${HEART}</button>
             <button class="iconbtn ${onS ? 'on' : ''}" data-act="seen" aria-pressed="${onS}" aria-label="${onS ? 'Unmark seen' : 'Mark seen'}" title="Seen it">✓</button>
-            <button class="iconbtn" data-act="notint" aria-label="Not interested" title="Not interested: hide for a year">✕</button>
+            <button class="iconbtn" data-act="notint" aria-label="Not interested" title="Not interested: hide for a year">⊘</button>
           </div>
         </div></div></div></div>
     <div class="dv-body"><div class="dv-main">
@@ -223,10 +260,7 @@ function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
         <section class="dv-sec"><h4>Mood profile <small>${f.jev ? 'TypeSafe Jev' : f.src === 'cat' ? 'estimated from genres & keywords' : 'estimated from genres'}</small></h4><div class="bars">${bars}</div><div class="tags">${moodBadges(f)}${flags}</div></section>
         ${cast}
       </div>
-      <aside class="dv-side"><section class="dv-sec panel"><h4>Where to watch <small>UK${f.live ? ' · live' : ''}</small></h4><ul class="dv-svcs">${svc}</ul>
-          ${f.wp && f.wp.link ? `<a class="dv-link" target="_blank" rel="noopener" href="${esc(f.wp.link)}">All UK options ${ico('ext')}</a>` : `<a class="dv-link" target="_blank" rel="noopener" href="https://www.justwatch.com/uk/search?q=${encodeURIComponent(f.t)}">Check JustWatch ${ico('ext')}</a>`}
-          <p class="tiny muted">Streaming data powered by JustWatch via TMDB.</p></section>
-        <section class="dv-sec panel dv-more"><h4>More</h4>
+      <aside class="dv-side"><section class="dv-sec panel dv-more"><h4>More</h4>
           <a class="dv-link" target="_blank" rel="noopener" href="${f.imdb ? 'https://www.imdb.com/title/' + esc(f.imdb) + '/' : 'https://www.imdb.com/find/?q=' + q}">IMDb ${ico('ext')}</a>
           <a class="dv-link" target="_blank" rel="noopener" href="${f.tmdb ? 'https://www.themoviedb.org/movie/' + f.tmdb : 'https://www.themoviedb.org/search?query=' + q}">TMDB ${ico('ext')}</a>
           <a class="dv-link" target="_blank" rel="noopener" href="https://letterboxd.com/search/${encodeURIComponent(f.t)}/">Letterboxd ${ico('ext')}</a></section>
@@ -235,10 +269,10 @@ function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
 function showDetail(f, rr = null, title = '', again = null, ctx = null, keepScroll = false){
   modalState = { f, rr, title, again, ctx };
   const st = keepScroll ? $('.modal-card').scrollTop : 0;
-  openModal(detailHTML(f, rr, { title, again: !!again, ctx }), true);
+  openModal(detailHTML(f, rr, { title, again: !!again, ctx }), true, f.t);
   if (keepScroll) $('.modal-card').scrollTop = st;
   if (again) $('#againBtn').onclick = again;
-  if (LIVE && !f.extra && !f._full) { f._full = true; T.details(f, true).then(() => { f.live = true; if (store.snap[f.id]) snap(f); updateBits(f); if (modalState && modalState.f === f && !$('#modal').hidden) showDetail(f, modalState.rr, modalState.title, modalState.again, modalState.ctx, true); }).catch(() => { f._full = false; }); }
+  if (LIVE && !f.extra && !f._full) { f._full = true; T.details(f, true).then(() => { if (store.snap[f.id]) snap(f); updateBits(f); if (modalState && modalState.f === f && !$('#modal').hidden) showDetail(f, modalState.rr, modalState.title, modalState.again, modalState.ctx, true); }).catch(() => { f._full = false; }); }
 }
 function openDetail(id){ const f = getM(id); if (f) showDetail(f); }
 
@@ -264,7 +298,6 @@ function nextPick(skipCurrent = true, first = false){
 
 /* ---------------- TONIGHT ---------------- */
 const today = () => new Date().toLocaleDateString('en-CA');
-const MAJOR = new Set(T.MAJOR);
 function tonightCtx(){
   const dow = new Date().getDay(), wk = dow >= 1 && dow <= 4, hr = new Date().getHours();
   const target = hr >= 22 || hr < 5 ? { comfort: .7, complex: .35 } : wk ? { complex: .45 } : null;
@@ -274,10 +307,9 @@ function renderHero(reroll = false){
   if (!FILMS.length) return;
   const { ctx, runtime, wk } = tonightCtx(); let rr = null;
   if (reroll && store.hero) { feedback('skip', store.hero.id); store.hero = null; }
-  if (store.hero && store.hero.date === today()) { const f = getM(store.hero.id); if (f && !has('seen', f.id) && !rules.banInfo(f.id)) rr = R.relevance(f, ctx); }
+  if (store.hero && store.hero.date === today()) { const f = getM(store.hero.id); if (f && !has('seen', f.id) && !rules.banInfo(f.id) && genreOK(f)) rr = R.relevance(f, ctx); }
   if (!rr) {
-    const svcs = store.services.length ? servicesSet() : MAJOR;
-    let c = candidates({ onlyMine: true, svcs, runtime, minVotes: 1500 }); if (c.length < 5) c = candidates({ runtime });
+    let c = candidates({ runtime, minVotes: 1500 }); if (c.length < 5) c = candidates({ runtime });
     const top = suggest(c, ctx, 8, .7); if (!top.length) { $('#hero').innerHTML = '<div class="empty">Everything is on cooldown. Clear cooldowns in Settings.</div>'; return; }
     const rnd = hash(today() + (reroll ? Math.random() : '')) % Math.min(4, top.length); rr = top[rnd];
     rules.markShown(rr.f.id); store.hero = { date: today(), id: rr.f.id }; save();
@@ -290,7 +322,6 @@ function renderHero(reroll = false){
       <div class="meta"><span class="star">★ ${f.wr.toFixed(1)}</span><span>${f.y || ''}</span><span data-run="${esc(f.id)}">${fmtRun(f.r)}</span><span>${esc(f.g.slice(0,3).join(' · '))}</span></div>
       ${f.d ? `<p class="syn">${esc(f.d)}</p>` : ''}
       <div class="why"><b>Why this one?</b> ${esc(dayWhy)} ${esc(R.why(rr, ctx))}</div>
-      <div class="badges" data-badges="${esc(f.id)}">${badgesHTML(f)}</div>
       <div class="actions"><button class="buy" data-open>Details</button><button class="btn ${has('watch', f.id) ? 'on' : ''}" data-act="watch">${has('watch', f.id) ? 'On watchlist' : 'Watchlist'}</button>
         <button class="btn" id="rerollHero" title="Counts as a skip">Not feeling it</button><button class="btn" data-goto="quiz">Take the quiz</button></div></div>`;
   $('#rerollHero').onclick = () => renderHero(true);
@@ -302,8 +333,7 @@ function renderQuickMoods(){
   $$('#quickMoods .mood').forEach(b => b.onclick = () => {
     const k = b.dataset.mood;
     const ctx = baseCtx(k === '*' ? {} : { target: R.moodTarget(k), moodLabel: R.MOODS[k].label });
-    let c = candidates({ onlyMine: store.services.length > 0, filter: k === '*' ? null : f => R.fitsMood(f, k) });
-    if (c.length < 5) c = candidates({ filter: k === '*' ? null : f => R.fitsMood(f, k) });
+    const c = candidates({ filter: k === '*' ? null : f => R.fitsMood(f, k) });
     const ranked = R.rank(c, ctx); const pool = ranked.slice(0, 60); // shuffle the top a little so every tap feels fresh
     const sh = pool.map(r => [r, r.score + Math.random() * .08]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
     openPicker(R.mmr(sh, 20, .7, 60), k === '*' ? 'Wildcard' : R.MOODS[k].label, ctx);
@@ -312,24 +342,22 @@ function renderQuickMoods(){
 function renderTonightRow(){
   if (!FILMS.length) return;
   const ctx = baseCtx({ prefer: 'classic' }); let list = null;
-  if (store.row && store.row.date === today() && store.row.svc === store.services.join('')) list = store.row.ids.map(getM).filter(f => f && !has('seen', f.id) && !rules.banInfo(f.id)).map(f => R.relevance(f, ctx));
+  if (store.row && store.row.date === today() && store.row.gp === gpKey()) list = store.row.ids.map(getM).filter(f => f && !has('seen', f.id) && !rules.banInfo(f.id) && genreOK(f)).map(f => R.relevance(f, ctx));
   if (!list || list.length < 6) {
-    const svcs = store.services.length ? servicesSet() : MAJOR;
-    list = suggest(candidates({ onlyMine: true, svcs, minVotes: 3000 }), ctx, 14, .65);
-    rules.markShown(list.map(r => r.f.id)); store.row = { date: today(), svc: store.services.join(''), ids: list.map(r => r.f.id) }; save();
+    list = suggest(candidates({ minVotes: 3000 }), ctx, 14, .65);
+    rules.markShown(list.map(r => r.f.id)); store.row = { date: today(), gp: gpKey(), ids: list.map(r => r.f.id) }; save();
   }
   $('#tonightRow').innerHTML = list.map(r => cardHTML(r.f, r, { mini: true })).join('') || '<p class="muted">Nothing here yet.</p>';
-  $('#tonightRow').closest('section').querySelector('.row-head h2').textContent = store.services.length ? 'Top picks on your services' : 'Top picks streaming in the UK';
   afterRender($('#tonightRow'));
 }
 
 /* ---------------- BROWSE ---------------- */
 const F = { moods:new Set(), genres:new Set(), runtime:new Set(), decades:new Set(), flags:new Set(), dims:{}, yFrom:null, yTo:null, minRating:0,
-  services:new Set(store.services), onlyMine:false, hideSeen:true, q:'', sort:'match', src:'cat' };
+  hideSeen:true, q:'', sort:'match', src:'cat' };
 const B = { page: 1, list: [], live: { items: [], page: 0, pages: 0, total: 0 }, token: 0, onlyLiveFilter: false };
 const PAGE = 48;
 function chipSet(el, entries, set, onChange){
-  el.innerHTML = entries.map(([k, label, color]) => `<button class="chip ${color ? 'svc' : ''}" data-k="${esc(k)}" aria-pressed="${set.has(k)}" ${color ? `style="--svc:${color}"` : ''}>${label}</button>`).join('');
+  el.innerHTML = entries.map(([k, label]) => `<button class="chip" data-k="${esc(k)}" aria-pressed="${set.has(k)}">${label}</button>`).join('');
   $$('.chip', el).forEach(b => b.onclick = () => { const k = b.dataset.k; set.has(k) ? set.delete(k) : set.add(k); b.setAttribute('aria-pressed', set.has(k)); onChange(); });
 }
 function buildFilters(){
@@ -339,16 +367,15 @@ function buildFilters(){
   chipSet($('#fRuntime'), Object.entries(RUNTIMES).map(([k, v]) => [k, v.label]), F.runtime, renderBrowse);
   chipSet($('#fDecade'), Object.entries(DECADES).map(([k, v]) => [k, v[2]]), F.decades, renderBrowse);
   chipSet($('#fFlags'), Object.entries(FLAGS).map(([k, v]) => [k, v.label]), F.flags, renderBrowse);
-  chipSet($('#fServices'), Object.entries(SERVICES).map(([k, v]) => [k, v.name, v.color]), F.services, () => { store.services = [...F.services]; save(); renderBrowse(); renderTonightRow(); });
+  genreControl($('#fGenrePrefs'), () => { renderBrowse(); });
   $('#fDims').innerHTML = SLIDERS.map(([k, l, lo, hi]) => `<div class="dim" data-k="${k}"><div class="dimh"><span>${l}</span><output>${F.dims[k] != null ? Math.round(F.dims[k]*100) : 'any'}</output></div>
     <input type="range" min="0" max="100" step="5" value="${F.dims[k] != null ? Math.round(F.dims[k]*100) : 50}" aria-label="${l}" class="${F.dims[k] != null ? 'set' : ''}"><div class="dimx"><span>${lo}</span><button class="link" data-clear="${k}">any</button><span>${hi}</span></div></div>`).join('');
   $$('#fDims .dim').forEach(d => { const k = d.dataset.k, inp = $('input', d);
     inp.oninput = () => { F.dims[k] = +inp.value / 100; inp.classList.add('set'); $('output', d).textContent = inp.value; renderBrowseSoon(); };
     $('[data-clear]', d).onclick = () => { delete F.dims[k]; inp.value = 50; inp.classList.remove('set'); $('output', d).textContent = 'any'; renderBrowse(); }; });
   $('#q').value = F.q; $('#minRating').value = F.minRating || 6; $('#ratingOut').textContent = F.minRating ? F.minRating.toFixed(1) + '+' : 'any';
-  $('#yFrom').value = F.yFrom || ''; $('#yTo').value = F.yTo || ''; $('#onlyMine').checked = F.onlyMine; $('#hideSeen').checked = F.hideSeen; $('#sort').value = F.sort;
+  $('#yFrom').value = F.yFrom || ''; $('#yTo').value = F.yTo || ''; $('#hideSeen').checked = F.hideSeen; $('#sort').value = F.sort;
   $$('#srcChips .chip').forEach(b => b.setAttribute('aria-pressed', b.dataset.src === F.src));
-  $('#svcNote').textContent = SOURCE === 'catalog' ? `Availability from the catalogue build${META ? ' (' + META.built.slice(0, 10) + ')' : ''}, refreshed live from TMDB/JustWatch on every card you see.` : 'Approximate offline tags.';
 }
 let rbT; const renderBrowseSoon = () => { clearTimeout(rbT); rbT = setTimeout(renderBrowse, 160); };
 function wireFilters(){
@@ -356,11 +383,10 @@ function wireFilters(){
   $('#minRating').oninput = e => { const v = +e.target.value; F.minRating = v <= 6 ? 0 : v; $('#ratingOut').textContent = F.minRating ? v.toFixed(1) + '+' : 'any'; renderBrowseSoon(); };
   $('#yFrom').oninput = e => { F.yFrom = +e.target.value || null; renderBrowseSoon(); };
   $('#yTo').oninput = e => { F.yTo = +e.target.value || null; renderBrowseSoon(); };
-  $('#onlyMine').onchange = e => { F.onlyMine = e.target.checked; renderBrowse(); };
   $('#hideSeen').onchange = e => { F.hideSeen = e.target.checked; renderBrowse(); };
   $('#sort').onchange = e => { F.sort = e.target.value; renderBrowse(); };
   $$('#srcChips .chip').forEach(b => b.onclick = () => { if (b.dataset.src === 'live' && !LIVE) { toast('Live TMDB is offline right now'); return; } F.src = b.dataset.src; buildFilters(); renderBrowse(); });
-  $('#resetFilters').onclick = () => { ['moods','genres','runtime','decades','flags'].forEach(k => F[k].clear()); F.dims = {}; Object.assign(F, { yFrom:null, yTo:null, minRating:0, onlyMine:false, q:'', sort:'match' }); buildFilters(); renderBrowse(); };
+  $('#resetFilters').onclick = () => { ['moods','genres','runtime','decades','flags'].forEach(k => F[k].clear()); F.dims = {}; Object.assign(F, { yFrom:null, yTo:null, minRating:0, q:'', sort:'match' }); buildFilters(); renderBrowse(); };
   $('#toggleFilters').onclick = () => { $('#filters').classList.toggle('open'); };
   $('#closeFilters').onclick = () => $('#filters').classList.remove('open');
   $('#loadMore').onclick = () => { if (F.src === 'live') loadLive(false); else { B.page++; drawBrowse(); } };
@@ -382,8 +408,7 @@ function catFilter(f){
   if (F.minRating && f.wr < F.minRating) return false;
   for (const k of F.flags) if (!FLAGS[k].test(f)) return false;
   for (const [k, t] of Object.entries(F.dims)) if (Math.abs((f.dims[k] ?? .5) - t) > .25) return false;
-  if (F.onlyMine && F.services.size && !(f.s && f.s.some(s => F.services.has(s)))) return false;
-  return true;
+  return genreOK(f);
 }
 function renderBrowse(){
   if (!FILMS.length) return;
@@ -395,7 +420,7 @@ function renderBrowse(){
   const sorters = { rating:(a,b)=>b.f.wr-a.f.wr, new:(a,b)=>(b.f.y||0)-(a.f.y||0), old:(a,b)=>(a.f.y||0)-(b.f.y||0), short:(a,b)=>(a.f.r||999)-(b.f.r||999), az:(a,b)=>a.f.t.localeCompare(b.f.t) };
   if (F.sort === 'match') { const r = R.rank(list, ctx); const head = R.mmr(r, Math.min(24, r.length), .75, 150); const ids = new Set(head.map(x => x.f.id)); ranked = [...head, ...r.filter(x => !ids.has(x.f.id))]; }
   else ranked = list.map(f => R.relevance(f, ctx)).sort(sorters[F.sort]);
-  B.list = ranked; B.onlyLiveFilter = false;
+  B.list = ranked;
   drawBrowse();
   if (F.q && F.q.length >= 2 && LIVE) liveSearch(F.q);
 }
@@ -412,7 +437,7 @@ async function liveSearch(q){
   const tok = ++B.token;
   try {
     const res = await T.search(q, 1); if (tok !== B.token) return;
-    const extra = res.items.filter(m => !BY_ID.has(m.id) || BY_ID.get(m.id).src === 'live').map(liveFilm).filter(f => !rules.banInfo(f.id));
+    const extra = res.items.filter(m => !BY_ID.has(m.id) || BY_ID.get(m.id).src === 'live').map(liveFilm).filter(f => !rules.banInfo(f.id) && genreOK(f));
     if (!extra.length) return;
     const ctx = B.ctx;
     $('#liveMore').innerHTML = `<h2 class="h2">More from TMDB <span class="muted">live search · ${res.total.toLocaleString('en-GB')} results</span></h2><div class="grid">${extra.map(f => cardHTML(f, R.relevance(f, ctx), { ctx })).join('')}</div>`;
@@ -422,14 +447,14 @@ async function liveSearch(q){
 async function loadLive(reset){
   const tok = ++B.token; const L = B.live;
   if (reset) { L.items = []; L.page = 0; $('#results').innerHTML = '<div class="empty">Asking TMDB…</div>'; }
-  const crit = { moods:F.moods, genres:F.genres, runtime:F.runtime, decades:F.decades, yFrom:F.yFrom, yTo:F.yTo, minRating:F.minRating, services:F.services, onlyMine:F.onlyMine };
+  const crit = { moods:F.moods, genres:F.genres, runtime:F.runtime, decades:F.decades, yFrom:F.yFrom, yTo:F.yTo, minRating:F.minRating, avoidGenres:store.genrePrefs.exclude, requireGenres:store.genrePrefs.require.length ? store.genrePrefs.require : null };
   try {
     const res = F.q ? await T.search(F.q, L.page + 1) : await T.discover(crit, { page: L.page + 1, pages: 2, sort: F.sort });
     if (tok !== B.token) return;
     L.page += F.q ? 1 : 2; L.pages = res.pages; L.total = res.total;
     const ids = new Set(L.items.map(f => f.id));
-    L.items.push(...res.items.map(liveFilm).filter(f => !ids.has(f.id) && !rules.banInfo(f.id) && !(F.hideSeen && has('seen', f.id))));
-    const ctx = B.ctx = browseCtx(); B.onlyLiveFilter = !!F.q;
+    L.items.push(...res.items.map(liveFilm).filter(f => !ids.has(f.id) && !rules.banInfo(f.id) && genreOK(f) && !(F.hideSeen && has('seen', f.id))));
+    const ctx = B.ctx = browseCtx();
     $('#resultCount').textContent = `${L.total.toLocaleString('en-GB')} films · live TMDB${F.q ? ' search' : ''}`;
     $('#results').innerHTML = L.items.length ? L.items.map(f => cardHTML(f, R.relevance(f, ctx), { ctx })).join('') : '<div class="empty">TMDB has nothing for that combination.</div>';
     B.list = L.items.map(f => R.relevance(f, ctx));
@@ -444,9 +469,9 @@ function activeChips(){
   F.flags.forEach(k => act.push(['flags', k, FLAGS[k].label]));
   Object.entries(F.dims).forEach(([k, v]) => act.push(['dims', k, `${SLIDERS.find(s => s[0] === k)[1]} ${Math.round(v * 100)}`]));
   if (F.minRating) act.push(['minRating', null, `★ ${F.minRating.toFixed(1)}+`]);
-  if (F.onlyMine && F.services.size) act.push(['onlyMine', null, `On ${[...F.services].map(s => SERVICES[s].name).join('/')}`]);
+  store.genrePrefs.exclude.forEach(g => act.push(['gx', g, `No ${g}`]));
   $('#activeChips').innerHTML = act.map(([, , l], i) => `<button class="chip" aria-pressed="true" data-i="${i}">${esc(l)} ✕</button>`).join('');
-  $$('#activeChips .chip').forEach(b => b.onclick = () => { const [g, k] = act[+b.dataset.i]; if (g === 'dims') delete F.dims[k]; else if (k !== null) F[g].delete(k); else if (g === 'minRating') F.minRating = 0; else F[g] = false; buildFilters(); renderBrowse(); });
+  $$('#activeChips .chip').forEach(b => b.onclick = () => { const [g, k] = act[+b.dataset.i]; if (g === 'gx') { setGenre(k, 0); } else if (g === 'dims') delete F.dims[k]; else if (k !== null) F[g].delete(k); else if (g === 'minRating') F.minRating = 0; else F[g] = false; buildFilters(); renderBrowse(); });
 }
 
 /* ---------------- QUIZ ---------------- */
@@ -457,7 +482,7 @@ const QUIZ = [
   { k:'who', q:"Who's watching?", opts:[{ v:'solo', l:'Just me', s:'My pick, my rules' }, { v:'date', l:'Date night', s:'Something for two' }, { v:'family', l:'Family / kids', s:'Nothing too dark' }, { v:'friends', l:'Mates', s:'Crowd-pleaser' }] },
   { k:'time', q:'How much time have you got?', opts:[{ v:'short', l:'Under 90 mins', s:'Quick one' }, { v:'mid', l:'Up to 2 hours', s:'Standard film' }, { v:'long', l:'All night', s:'Bring on the epic' }, { v:'*', l:"Doesn't matter", s:'' }] },
   { k:'era', q:'Old or new?', opts:[{ v:'classic', l:'Classics', s:'Before 2000' }, { v:'mid', l:'2000s–2010s', s:'Modern-ish' }, { v:'new', l:'Recent', s:'2018 onwards' }, { v:'*', l:'Any era', s:'' }] },
-  { k:'svc', multi:true, q:'Which services have you got?', note:'Pick all that apply. We remember for next time.', opts:[...Object.entries(SERVICES).map(([k, v]) => ({ v:k, l:v.name })), { v:'*', l:"Don't mind", s:'Happy to rent' }] },
+  { k:'genres', genres:true, q:'Anything you never want to see?', note:'Tap a genre to rule it out. Tap again (or long-press) to require it. Saved for Tonight, Browse and Surprise too.' },
   { k:'taste', q:'Last one: safe bet or something different?', opts:[{ v:'classic', l:'Safe bet', s:'Highly rated, proven' }, { v:'gem', l:'Something different', s:'Less obvious picks' }, { v:'*', l:'Either', s:'' }] },
 ];
 let qi = 0; const qa = {}; let quizPicks = [], quizCtx = null;
@@ -465,7 +490,15 @@ const qSkip = i => QUIZ[i] && QUIZ[i].skipIf && QUIZ[i].skipIf();
 function renderQuiz(){
   while (qSkip(qi)) qi++;
   const el = $('#quiz'); if (qi >= QUIZ.length) return renderQuizResults();
-  const step = QUIZ[qi]; if (step.multi && !qa[step.k]) qa[step.k] = new Set(store.services);
+  const step = QUIZ[qi];
+  if (step.genres) {
+    el.innerHTML = `<div class="progress"><i style="width:${qi / QUIZ.length * 100}%"></i></div><div class="qstep">Question ${qi + 1} of ${QUIZ.length}</div><h2 class="qh">${step.q}</h2><p class="muted">${step.note}</p>
+      <div id="qGenres"></div><div class="qnav"><button class="btn" id="qBack">← Back</button><button class="btn primary" id="qNext">Next →</button></div>`;
+    genreControl($('#qGenres'), () => {});
+    $('#qBack').onclick = () => { qi = Math.max(0, qi - 1); while (qi > 0 && qSkip(qi)) qi--; renderQuiz(); };
+    $('#qNext').onclick = () => { qi++; quizPicks = []; renderQuiz(); };
+    return;
+  }
   const isOn = v => step.multi ? qa[step.k].has(v) : qa[step.k] === v;
   el.innerHTML = `<div class="progress"><i style="width:${qi / QUIZ.length * 100}%"></i></div><div class="qstep">Question ${qi + 1} of ${QUIZ.length}</div><h2 class="qh">${step.q}</h2>${step.note ? `<p class="muted">${step.note}</p>` : ''}
     <div class="opts">${step.opts.map(o => `<button class="opt ${isOn(o.v) ? 'on' : ''}" data-v="${o.v}" aria-pressed="${isOn(o.v)}"><b>${o.l}</b>${o.s ? `<span class="s">${o.s}</span>` : ''}</button>`).join('')}</div>
@@ -473,26 +506,24 @@ function renderQuiz(){
   $$('.opt', el).forEach(b => b.onclick = () => { const v = b.dataset.v;
     if (step.multi) { const s = qa[step.k]; if (v === '*') s.clear(); else s.has(v) ? s.delete(v) : s.add(v); renderQuiz(); } else { qa[step.k] = v; qi++; renderQuiz(); } });
   $('#qBack').onclick = () => { qi = Math.max(0, qi - 1); while (qi > 0 && qSkip(qi)) qi--; renderQuiz(); };
-  if (step.multi) $('#qNext').onclick = () => { store.services = [...qa.svc]; F.services = new Set(store.services); save(); buildFilters(); qi++; renderQuiz(); };
 }
 function quizSetup(){
   const target = qa.feel && qa.feel !== '*' ? R.moodManagementTarget(qa.feel, qa.mode || 'match') : null;
   let zill = '';
   if (target) { const fl = R.FEELINGS[qa.feel].label.toLowerCase();
     zill = qa.mode === 'change' ? `You're ${fl} and want a change, so we aimed to repair the mood` : `You're ${fl} and want to stay there, so we matched it`; }
-  const ctx = baseCtx({ target, zillmann: zill, prefer: qa.taste === '*' ? null : qa.taste, services: qa.svc || new Set() });
+  const ctx = baseCtx({ target, zillmann: zill, prefer: qa.taste === '*' ? null : qa.taste });
   if (qa.who === 'date') ctx.target = Object.assign({ romance: .6 }, ctx.target || {});
   if (qa.who === 'friends') ctx.target = Object.assign({ humour: .6, pace: .7 }, ctx.target || {});
-  const svcs = qa.svc || new Set();
   const filter = f => (qa.who !== 'family' || (f.dims.family >= .6 && f.dims.scary < .4 && f.dims.violence < .45))
     && (qa.era !== 'classic' || f.y < 2000) && (qa.era !== 'mid' || (f.y >= 2000 && f.y <= 2017)) && (qa.era !== 'new' || f.y >= 2018)
     && (qa.who !== 'date' || f.dims.scary < .6);
   const runtime = qa.time && qa.time !== '*' ? new Set(qa.time === 'mid' ? ['short', 'mid'] : [qa.time]) : null;
-  return { ctx, svcs, filter, runtime };
+  return { ctx, filter, runtime };
 }
 function computeQuizPicks(){
-  const { ctx, svcs, filter, runtime } = quizSetup(); quizCtx = ctx;
-  let c = candidates({ onlyMine: svcs.size > 0, svcs, runtime, filter, minVotes: qa.taste === 'gem' ? 150 : 400 });
+  const { ctx, filter, runtime } = quizSetup(); quizCtx = ctx;
+  let c = candidates({ runtime, filter, minVotes: qa.taste === 'gem' ? 150 : 400 });
   if (c.length < 3) c = candidates({ runtime, filter });
   quizPicks = suggest(c, ctx, 3, .7); rules.markShown(quizPicks.map(r => r.f.id));
 }
@@ -505,7 +536,6 @@ function renderQuizResults(){
       <div><span class="eyebrow">${i === 0 ? 'Top pick' : 'Also great'}</span><h3 class="pt" data-open>${esc(f.t)}</h3>
       <div class="meta"><span class="star">★ ${f.wr.toFixed(1)}</span><span>${f.y || ''}</span><span data-run="${esc(f.id)}">${fmtRun(f.r)}</span><span>${esc(f.g.slice(0, 3).join(' · '))}</span></div>
       ${f.d ? `<p>${esc(f.d)}</p>` : ''}<div class="why"><b>Why this pick?</b> ${esc(R.why(r, ctx))}</div>
-      <div class="badges" data-badges="${esc(f.id)}">${badgesHTML(f)}</div>
       <div class="actions"><button class="btn sm ${has('watch', f.id) ? 'on' : ''}" data-act="watch">${has('watch', f.id) ? 'On watchlist' : 'Watchlist'}</button><button class="btn sm ${fb === 'like' ? 'on' : ''}" data-act="like">▲ Like</button><button class="btn sm ${fb === 'dislike' ? 'on' : ''}" data-act="dislike">▼ Dislike</button><button class="btn sm" data-act="seen">Seen it</button><button class="btn sm" data-act="notint">Not interested</button></div>
       </div></div>`; }).join('') : '<div class="empty">Nothing new fits every answer. Try loosening one.</div>'}</div>
     <div class="qnav"><button class="btn" id="qRestart">↺ Start over</button><button class="btn primary" id="qShuffle" title="Counts as a skip for these picks">${ico('dice')} Shuffle picks</button></div>`;
@@ -537,8 +567,8 @@ function updateSavedCount(){ const n = store.watch.length, el = $('#savedCount')
 /* ---------------- FAB: context surprise ---------------- */
 $('#fab').onclick = () => {
   const v = curView;
-  if (v === 'browse') { if (!B.list.length) { toast('Nothing to pick from: loosen a filter'); return; } openPicker(R.mmr(B.list, 20, .7, 80), 'Surprise me', B.ctx); }
-  else if (v === 'saved') { const ctx = baseCtx(); const list = store[savedList === 'fav' ? 'fav' : 'watch'].map(getM).filter(f => f && !has('seen', f.id)).map(f => R.relevance(f, ctx)).sort((a, b) => b.score - a.score);
+  if (v === 'browse') { if (!B.list.length) { toast('Nothing to pick from: loosen a filter'); return; } const pool = B.list.filter(r => rules.eligible(r.f.id)); if (!pool.length) { toast('Nothing new matches. Loosen a filter, or clear cooldowns in Settings'); return; } openPicker(R.mmr(pool, 20, .7, 80), 'Surprise me', B.ctx); }
+  else if (v === 'saved') { const ctx = baseCtx(); const list = store[savedList === 'fav' ? 'fav' : 'watch'].map(getM).filter(f => f && !has('seen', f.id) && genreOK(f)).map(f => R.relevance(f, ctx)).sort((a, b) => b.score - a.score);
     openPicker(list, 'From your ' + (savedList === 'fav' ? 'favourites' : 'watchlist'), ctx); }
   else { $('#quickMoods [data-mood="*"]').click(); }
 };
@@ -548,19 +578,18 @@ $('#settingsBtn').onclick = () => {
   modalState = null; picker = null; const rs = rules.stats();
   const status = LIVE ? `<span class="badge ok">TMDB live</span>` : `<span class="badge warn">TMDB offline</span>`;
   const jevN = FILMS.filter(f => f.jev).length;
-  openModal(`<div class="settings"><h2 class="h2">Settings</h2>
-    <div class="panel"><h3 class="h2">My streaming services</h3><div class="chips wrap" id="setSvc"></div></div>
+  openModal(`<div class="settings">
+    <div class="panel"><h3 class="h2">Genres</h3><p class="muted">Tap to rule a genre out, tap again (or long-press) to require it, tap a third time to clear. Applied everywhere.</p><div id="setGenres"></div></div>
     <div class="panel"><h3 class="h2">Data</h3><p class="muted">${status} ${SOURCE === 'catalog' ? `<span class="badge">${FILMS.length.toLocaleString('en-GB')} film catalogue</span> <span class="badge">${jevN ? jevN.toLocaleString('en-GB') + ' scored by Jev' : 'Mood scores estimated'}</span>` : '<span class="badge warn">Offline list · 170 films</span>'}</p>
-      ${STATS ? `<p class="muted">Live TMDB reach: ${STATS.all.toLocaleString('en-GB')}+ films with 10+ votes · ${STATS.uk.toLocaleString('en-GB')} on UK subscription, free or ad-supported services.</p>` : ''}
+      ${STATS ? `<p class="muted">Live TMDB reach: ${STATS.all.toLocaleString('en-GB')}+ films with 10+ votes.</p>` : ''}
       <label class="muted" for="tmdbKey">Own TMDB key (optional override)</label><input type="password" id="tmdbKey" autocomplete="off" placeholder="${(window.REELPICK_CONFIG || {}).tmdbKey ? 'Using the built-in key' : 'v3 API key or v4 read token'}" value="${esc(store.tmdbKey)}">
       <div class="row2"><button class="btn" id="saveKey">Save key</button><button class="btn" id="exportData">Export my lists</button></div></div>
     <div class="panel"><h3 class="h2">Suggestion rules</h3><p class="muted">Suggested films rest for 30 days. Three skips, or “Not interested”, hides a film for a year. No repeats within a visit.</p>
       <p class="muted"><b>${rs.cooldown}</b> on cooldown · <b>${rs.banned}</b> hidden · <b>${rs.struck}</b> with strikes · taste profile from <b>${store.fb.length + store.fav.length + store.watch.length}</b> signals</p>
       <div class="row2"><button class="btn" id="clearRules">Clear cooldowns & hidden</button><button class="btn" id="clearTaste">Reset taste profile</button></div>
       <button class="btn" id="wipe">Reset everything</button></div>
-    <p class="tiny muted">This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability from JustWatch via TMDB.</p></div>`);
-  const svcSet = new Set(store.services);
-  chipSet($('#setSvc'), Object.entries(SERVICES).map(([k, v]) => [k, v.name, v.color]), svcSet, () => { store.services = [...svcSet]; F.services = new Set(svcSet); save(); buildFilters(); refreshAll(); });
+    <p class="tiny muted">This product uses the TMDB API but is not endorsed or certified by TMDB.</p></div>`, false, 'Settings');
+  genreControl($('#setGenres'), () => { buildFilters(); refreshAll(); });
   $('#saveKey').onclick = async () => { store.tmdbKey = $('#tmdbKey').value.trim(); save(); closeModal(); await startLive(); toast(LIVE ? 'TMDB live' : 'TMDB key not accepted, offline mode'); refreshAll(); };
   $('#exportData').onclick = () => { const n = id => (getM(id) || {}).t; const out = { watchlist: store.watch.map(n), favourites: store.fav.map(n), seen: store.seen.map(n), liked: store.fb.filter(e => e.type === 'like').map(e => n(e.id)) };
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type:'application/json' })); a.download = 'reelpick-lists.json'; a.click(); };
@@ -570,17 +599,19 @@ $('#settingsBtn').onclick = () => {
 };
 
 /* ---------------- views ---------------- */
-const TITLES = { tonight:['Reel Pick', () => 'tonight · ' + new Date().toLocaleDateString('en-GB', { weekday:'long' }).toLowerCase() + ' · uk streaming'], quiz:['Quiz', () => 'mood · company · time · taste'],
+const TITLES = { tonight:['Reel Pick', () => 'tonight · ' + new Date().toLocaleDateString('en-GB', { weekday:'long' }).toLowerCase()], quiz:['Quiz', () => 'mood · company · time · taste'],
   browse:['Browse', () => `${FILMS.length.toLocaleString('en-GB')} films${LIVE ? ' · tmdb live' : ''}`], saved:['Saved', () => 'watchlist · favourites · hidden'] };
 let curView = 'tonight';
 function switchView(v){
+  if (!$('#modal').hidden) closeModal();
+  $('#filters').classList.remove('open');
   curView = v;
   $$('.tabs button').forEach(t => t.classList.toggle('active', t.dataset.view === v));
   $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
   $('#title').textContent = TITLES[v][0]; $('#sub').textContent = TITLES[v][1]();
   $('#fab').classList.toggle('hide', v === 'quiz');
   if (v === 'saved') renderSaved(); if (v === 'quiz') renderQuiz(); if (v === 'browse') renderBrowse();
-  history.replaceState(null, '', '#' + v); window.scrollTo({ top: 0 });
+  if (!(history.state && history.state.rpModal)) history.replaceState(null, '', '#' + v); window.scrollTo({ top: 0 });
 }
 $$('.tabs button').forEach(t => t.onclick = () => switchView(t.dataset.view));
 function refreshAll(soft = false){
@@ -594,9 +625,9 @@ function refreshAll(soft = false){
 function footer(){
   const src = SOURCE === 'catalog'
     ? `${FILMS.length.toLocaleString('en-GB')}-film catalogue built ${META.built.slice(0, 10)}${META.jev_scored ? ` · mood scores by TypeSafe Jev` : ' · mood scores estimated from genres & keywords'}`
-    : 'Offline list of 170 curated films · streaming tags approximate';
-  const live = LIVE ? ` · TMDB live${STATS ? `: ${STATS.all.toLocaleString('en-GB')}+ films reachable, ${STATS.uk.toLocaleString('en-GB')} streaming in the UK` : ''}` : ' · TMDB offline';
-  $('#foot').innerHTML = `${esc(src)}${esc(live)}.<br>Film data & images from TMDB; streaming availability from JustWatch. This product uses the TMDB API but is not endorsed or certified by TMDB.`;
+    : 'Offline list of 170 curated films';
+  const live = LIVE ? ` · TMDB live${STATS ? `: ${STATS.all.toLocaleString('en-GB')}+ films reachable` : ''}` : ' · TMDB offline';
+  $('#foot').innerHTML = `${esc(src)}${esc(live)}.<br>Film data & images from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.`;
   $('#sub').textContent = TITLES[curView][1]();
 }
 function onLiveError(e){ if (e && e.status === 401) { LIVE = false; toast('TMDB key rejected: offline mode'); footer(); } else if (!onLiveError.t) { onLiveError.t = 1; toast('TMDB unreachable: showing catalogue data'); } }
@@ -614,6 +645,7 @@ async function startLive(){
   const start = (location.hash || '').slice(1);
   if (['tonight', 'quiz', 'browse', 'saved'].includes(start)) switchView(start); else switchView('tonight');
   loadOverviews();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
   document.documentElement.dataset.ready = '1';
 })();
 window.ReelPick = { get films(){ return FILMS; }, store, rules, get live(){ return LIVE; }, get source(){ return SOURCE; }, get stats(){ return STATS; }, getM };

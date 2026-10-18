@@ -7,7 +7,7 @@
  {
   "check": "desktop: reach stats",
   "ok": true,
-  "detail": "{'all': 106053, 'uk': 38829, 'capped': False}"
+  "detail": "{'all': 106053, 'capped': False}"
  },
  {
   "check": "desktop: hero poster loads from TMDB",
@@ -25,9 +25,9 @@
   "detail": "{'n': 8, 'ok': 8, 'tmdb': 8}"
  },
  {
-  "check": "desktop: UK providers refreshed live on cards",
+  "check": "desktop: no streaming-provider UI in browse",
   "ok": true,
-  "detail": "live=33 services=['NETFLIX', 'PARAMOUNT+', 'PRIME', 'DISNEY+', 'NOW', 'MAX', 'iPLAYER', 'APPLE TV', 'ITVX']"
+  "detail": "{'svcBadges': 0, 'words': []}"
  },
  {
   "check": "desktop: 'why' text on results",
@@ -40,9 +40,9 @@
   "detail": "catalogue=3 live=17"
  },
  {
-  "check": "desktop: live discover (Comedy, 90\u2013120m, Netflix) from TMDB",
+  "check": "desktop: live discover (Comedy, 90\u2013120m) from TMDB",
   "ok": true,
-  "detail": "493 FILMS \u00b7 LIVE TMDB; 40/40 refreshed cards show Netflix"
+  "detail": "5,157 FILMS \u00b7 LIVE TMDB; 40 cards; runtimes ['1h 37m', '2h 10m', '1h 42m', '1h 43m', '1h 48m', '1h 37m']"
  },
  {
   "check": "desktop: live discover posters load",
@@ -50,19 +50,39 @@
   "detail": "{'n': 8, 'ok': 8, 'tmdb': 8}"
  },
  {
-  "check": "desktop: detail shows live UK providers + cast",
+  "check": "desktop: detail shows live cast + trailer, no providers",
   "ok": true,
-  "detail": "provider logos=3 cast=10"
+  "detail": "cast=10 trailer=1 {'svcBadges': 0, 'words': []}"
+ },
+ {
+  "check": "desktop: quiz genre step: tap excludes",
+  "ok": true,
+  "detail": "['Comedy', 'Horror']"
  },
  {
   "check": "desktop: quiz returns 3 picks with mood-management 'why'",
   "ok": true,
-  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: light in tone (80%), comforting (75%); 8.3 weighted rating from 19k votes."
+  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: comforting (72%), light in tone (90%); 8.5 weighted rating from 2.3k votes."
+ },
+ {
+  "check": "desktop: quiz exclusions filter the picks (no Comedy/Horror)",
+  "ok": true,
+  "detail": "[['Adventure', 'Animation', 'Family', 'Fantasy'], ['Animation', 'Adventure', 'Fantasy', 'Action'], ['Fantasy', 'Animation', 'Adventure']]"
+ },
+ {
+  "check": "desktop: exclusions persist after reload and filter Tonight + Browse",
+  "ok": true,
+  "detail": "prefs={'exclude': ['Comedy', 'Horror'], 'require': []} browse=48 tonight=16 (catalogue has 4816 such films)"
  },
  {
   "check": "desktop: picker never repeats + skips logged + not-interested bans",
   "ok": true,
-  "detail": "[['tmdb-510', 'cooldown', 1], ['tmdb-637', 'cooldown', 1], ['tmdb-73', 'cooldown', 1], ['tmdb-68718', 'banned', 0]]"
+  "detail": "[['tmdb-73', 'cooldown', 1], ['tmdb-489', 'cooldown', 1], ['tmdb-68718', 'cooldown', 1], ['tmdb-207', 'banned', 0]]"
+ },
+ {
+  "check": "desktop: no TMDB watch-provider requests",
+  "ok": true,
+  "detail": "[]"
  },
  {
   "check": "desktop: no console errors",
@@ -72,7 +92,7 @@
  {
   "check": "desktop: TMDB endpoints used",
   "ok": true,
-  "detail": "['/discover/movie', '/search/movie', '/watch/providers/movie', '/movie/{id}']"
+  "detail": "['/discover/movie', '/search/movie', '/movie/{id}']"
  },
  {
   "check": "iphone: TMDB live + catalogue loaded",
@@ -82,7 +102,7 @@
  {
   "check": "iphone: reach stats",
   "ok": true,
-  "detail": "{'all': 106053, 'uk': 38829, 'capped': False}"
+  "detail": "{'all': 106053, 'capped': False}"
  },
  {
   "check": "iphone: hero poster loads from TMDB",
@@ -100,9 +120,9 @@
   "detail": "{'n': 6, 'ok': 6, 'tmdb': 6}"
  },
  {
-  "check": "iphone: UK providers refreshed live on cards",
+  "check": "iphone: no streaming-provider UI in browse",
   "ok": true,
-  "detail": "live=33 services=['NETFLIX', 'PARAMOUNT+', 'PRIME', 'DISNEY+', 'NOW', 'MAX', 'iPLAYER', 'APPLE TV', 'ITVX']"
+  "detail": "{'svcBadges': 0, 'words': []}"
  },
  {
   "check": "iphone: 'why' text on results",
@@ -115,9 +135,9 @@
   "detail": "catalogue=3 live=17"
  },
  {
-  "check": "iphone: live discover (Comedy, 90\u2013120m, Netflix) from TMDB",
+  "check": "iphone: live discover (Comedy, 90\u2013120m) from TMDB",
   "ok": true,
-  "detail": "493 FILMS \u00b7 LIVE TMDB; 40/40 refreshed cards show Netflix"
+  "detail": "5,157 FILMS \u00b7 LIVE TMDB; 40 cards; runtimes ['1h 37m', '2h 10m', '1h 42m', '1h 43m', '1h 48m', '1h 37m']"
  },
  {
   "check": "iphone: live discover posters load",
@@ -125,19 +145,39 @@
   "detail": "{'n': 6, 'ok': 6, 'tmdb': 6}"
  },
  {
-  "check": "iphone: detail shows live UK providers + cast",
+  "check": "iphone: detail shows live cast + trailer, no providers",
   "ok": true,
-  "detail": "provider logos=3 cast=10"
+  "detail": "cast=10 trailer=1 {'svcBadges': 0, 'words': []}"
+ },
+ {
+  "check": "iphone: quiz genre step: tap excludes",
+  "ok": true,
+  "detail": "['Comedy', 'Horror']"
  },
  {
   "check": "iphone: quiz returns 3 picks with mood-management 'why'",
   "ok": true,
-  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: light in tone (80%), comforting (75%); 8.3 weighted rating from 19k votes."
+  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: comforting (72%), light in tone (90%); 8.5 weighted rating from 2.3k votes."
+ },
+ {
+  "check": "iphone: quiz exclusions filter the picks (no Comedy/Horror)",
+  "ok": true,
+  "detail": "[['Adventure', 'Animation', 'Family', 'Fantasy'], ['Animation', 'Adventure', 'Fantasy', 'Action'], ['Fantasy', 'Animation', 'Adventure']]"
+ },
+ {
+  "check": "iphone: exclusions persist after reload and filter Tonight + Browse",
+  "ok": true,
+  "detail": "prefs={'exclude': ['Comedy', 'Horror'], 'require': []} browse=48 tonight=16 (catalogue has 4816 such films)"
  },
  {
   "check": "iphone: picker never repeats + skips logged + not-interested bans",
   "ok": true,
-  "detail": "[['tmdb-510', 'cooldown', 1], ['tmdb-637', 'cooldown', 1], ['tmdb-73', 'cooldown', 1], ['tmdb-38286', 'banned', 0]]"
+  "detail": "[['tmdb-73', 'cooldown', 1], ['tmdb-68718', 'cooldown', 1], ['tmdb-489', 'cooldown', 1], ['tmdb-207', 'banned', 0]]"
+ },
+ {
+  "check": "iphone: no TMDB watch-provider requests",
+  "ok": true,
+  "detail": "[]"
  },
  {
   "check": "iphone: no console errors",
@@ -147,7 +187,122 @@
  {
   "check": "iphone: TMDB endpoints used",
   "ok": true,
-  "detail": "['/discover/movie', '/search/movie', '/watch/providers/movie', '/movie/{id}']"
+  "detail": "['/discover/movie', '/search/movie', '/movie/{id}']"
+ },
+ {
+  "check": "standalone: viewport-fit=cover, status-bar style 'default', manifest",
+  "ok": true,
+  "detail": "['width=device-width,initial-scale=1,viewport-fit=cover', 'default', True]"
+ },
+ {
+  "check": "standalone: home-screen name REEL//PICK, apple-touch-icon 180, manifest icons 192/512",
+  "ok": true,
+  "detail": "['REEL//PICK', ['180x180', 'http://localhost:47391/icon-180.png', 'REEL//PICK'], {'192x192': ['any', 200], '512x512': ['any', 200]}]"
+ },
+ {
+  "check": "standalone: header sits below the 62px inset",
+  "ok": true,
+  "detail": "[['#title', 77, 18], ['#settingsBtn', 70, 44], ['.top .brand', 77, 31]]"
+ },
+ {
+  "check": "standalone: bottom nav sits above the 34px home indicator, 44px+ targets",
+  "ok": true,
+  "detail": "[['tonight', 860, 922, 62], ['quiz', 860, 922, 62], ['browse', 860, 922, 62], ['saved', 860, 922, 62]]"
+ },
+ {
+  "check": "standalone: [settings] every close/X control is below the inset, 44px+, and not covered",
+  "ok": true,
+  "detail": "[{'id': 'sheetClose', 'text': 'Close', 'top': 68, 'w': 76, 'h': 44, 'hit': True}]"
+ },
+ {
+  "check": "standalone: settings sheet has a titled bar with a visible Close",
+  "ok": true,
+  "detail": "title='SETTINGS' close={'x': 354, 'y': 68, 'width': 76, 'height': 44}"
+ },
+ {
+  "check": "standalone: Close leaves settings",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "standalone: nav tab 'browse' is tappable while settings is open and leaves it",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "standalone: nav tab 'saved' is tappable while settings is open and leaves it",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "standalone: nav tab 'quiz' is tappable while settings is open and leaves it",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "standalone: nav tab 'tonight' is tappable while settings is open and leaves it",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "standalone: browser back closes settings and stays in the app",
+  "ok": true,
+  "detail": "[True, 'http://localhost:47391/#tonight']"
+ },
+ {
+  "check": "standalone: swipe-down closes the sheet",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "standalone: settings genre chips: tap excludes, long-press requires",
+  "ok": true,
+  "detail": "['Animation:2', 'Horror:1', 'Romance:1']"
+ },
+ {
+  "check": "standalone: genre prefs persist across reload",
+  "ok": true,
+  "detail": "{'exclude': ['Horror', 'Romance'], 'require': []}"
+ },
+ {
+  "check": "standalone: [filters drawer] every close/X control is below the inset, 44px+, and not covered",
+  "ok": true,
+  "detail": "[{'id': 'closeFilters', 'text': 'Done', 'top': 70, 'w': 76, 'h': 44, 'hit': True}]"
+ },
+ {
+  "check": "standalone: [surprise detail] every close/X control is below the inset, 44px+, and not covered",
+  "ok": true,
+  "detail": "[{'id': 'sheetClose', 'text': 'Close', 'top': 73, 'w': 76, 'h': 44, 'hit': True}]"
+ },
+ {
+  "check": "standalone: exclusions are hard filters in Tonight, Browse and Surprise",
+  "ok": true,
+  "detail": "tonight=16 browse=48 surprise=[['Adventure', 'Animation', 'Family', 'Fantasy'], ['Animation', 'Adventure', 'Fantasy', 'Action'], ['Animation', 'Action', 'Fantasy'], ['Adventure', 'Sci-Fi', 'Action'], "
+ },
+ {
+  "check": "standalone: no streaming-provider UI",
+  "ok": true,
+  "detail": "{'svcBadges': 0, 'words': []}"
+ },
+ {
+  "check": "standalone: [detail scrolled] every close/X control is below the inset, 44px+, and not covered",
+  "ok": true,
+  "detail": "[{'id': 'sheetClose', 'text': 'Close', 'top': 68, 'w': 76, 'h': 44, 'hit': True}]"
+ },
+ {
+  "check": "standalone: detail sheet has no sideways overflow",
+  "ok": true,
+  "detail": "[440, 440, 440]"
+ },
+ {
+  "check": "standalone: no stray X buttons on the quiz view",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "standalone: no console errors",
+  "ok": true,
+  "detail": "[]"
  },
  {
   "check": "clock: after reload hero is on cooldown, strikes + ban persisted",

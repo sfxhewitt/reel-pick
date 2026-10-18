@@ -85,12 +85,11 @@ def details(mid, max_age_days=3):
     with db() as c:
         row = c.execute("SELECT v, fetched FROM tmdb WHERE id=?", (mid,)).fetchone()
     if row and time.time() - row["fetched"] < max_age_days * 86400: return json.loads(row["v"])
-    d = tmdb(f"/movie/{mid}", language="en-GB", append_to_response="keywords,watch/providers,release_dates")
+    d = tmdb(f"/movie/{mid}", language="en-GB", append_to_response="keywords,release_dates")
     keep = {k: d.get(k) for k in ("id", "title", "release_date", "runtime", "vote_average", "vote_count", "popularity", "overview",
                                   "poster_path", "backdrop_path", "imdb_id", "original_language", "tagline")}
     keep["genres"] = [g["id"] for g in d.get("genres", [])]
     keep["keywords"] = [k["name"] for k in (d.get("keywords") or {}).get("keywords", [])][:20]
-    keep["gb"] = ((d.get("watch/providers") or {}).get("results") or {}).get("GB") or {}
     cert = ""
     for rd in (d.get("release_dates") or {}).get("results", []):
         if rd.get("iso_3166_1") == "GB":
@@ -237,17 +236,6 @@ def heuristic(f):
     out["quad"] = {k: round(x / t, 3) for k, x in q.items()}; out["src"] = "heuristic"
     return out
 
-# ---------------- providers (same matchers as tmdb.js) ----------------
-SVC = [("N", r"^netflix"), ("P", r"^amazon prime video"), ("D", r"^disney"), ("A", r"^apple tv( ?\+| plus)?$"),
-       ("S", r"^(now( tv)?( cinema)?|sky go)$"), ("M", r"^(hbo )?max$"), ("B", r"^bbc iplayer"), ("I", r"^itvx"),
-       ("C", r"^channel 4"), ("U", r"^paramount( ?\+| plus)( premium| basic.*)?$")]
-def codes(gb):
-    out = ""
-    for p in (gb.get("flatrate") or []) + (gb.get("free") or []) + (gb.get("ads") or []):
-        for code, rx in SVC:
-            if re.search(rx, p["provider_name"], re.I) and code not in out: out += code
-    return out
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", type=int, default=5000)
@@ -304,16 +292,16 @@ def write(films, scores, secs):
         rows.append([f["id"], f["title"], int(f["release_date"][:4]), f["runtime"], round(f.get("vote_average") or 0, 1), f.get("vote_count") or 0,
                      f["genres"], [kix[k] for k in f["keywords"] if k in kix][:8], f.get("poster_path") or "",
                      [round(s[d] * 100) for d in DIMS], [round((q.get(k) or 0) * 100) for k in ("excited", "content", "tense", "sad")],
-                     codes(f.get("gb") or {}), f.get("cert") or "", f.get("imdb_id") or "", 0 if s.get("src") == "heuristic" else 1])
+                     "", f.get("cert") or "", f.get("imdb_id") or "", 0 if s.get("src") == "heuristic" else 1])
     meta = {"built": datetime.now(timezone.utc).isoformat(timespec="seconds"), "count": len(rows), "model": MODEL, "question_set": QV,
             "jev_calls_total": tot_calls, "jev_input_tokens_total": tot_tok, "est_cost_usd_total": round(tot_tok * PRICE_PER_MTOK / 1e6, 4),
             "jev_calls_this_run": stats["calls"], "jev_tokens_this_run": stats["tokens"], "cached_this_run": stats["cached"], "errors_this_run": stats["errors"], "jev_auth_failed": stats["auth_failed"],
-            "price_per_mtok_usd": PRICE_PER_MTOK, "providers_region": "GB", "build_seconds": round(secs),
+            "price_per_mtok_usd": PRICE_PER_MTOK, "cert_region": "GB", "build_seconds": round(secs),
             "jev_scored": n_jev, "heuristic_scored": len(rows) - n_jev,
             "fields": ["tmdb_id", "title", "year", "runtime", "tmdb_rating", "votes", "genre_ids", "keyword_idx", "poster_path",
-                       "dims_x100", "quadrant_x100", "uk_services", "uk_cert", "imdb_id", "score_src(1=jev,0=heuristic)"],
+                       "dims_x100", "quadrant_x100", "reserved(empty; no streaming data)", "uk_cert", "imdb_id", "score_src(1=jev,0=heuristic)"],
             "dims": DIMS, "quadrant": ["excited", "content", "tense", "sad"],
-            "sources": "Film data and images: TMDB. UK streaming availability: JustWatch via TMDB. Affect scores: TypeSafe Jev (build time)."}
+            "sources": "Film data and images: TMDB. Affect scores: TypeSafe Jev (build time)."}
     out = {"meta": meta, "genres": {str(k): v for k, v in GENRES.items()}, "keywords": vocab, "films": rows}
     with open(OUT, "w") as fh: json.dump(out, fh, ensure_ascii=False, separators=(",", ":"))
     # synopses ship separately and load after first render (keeps the core catalogue small)

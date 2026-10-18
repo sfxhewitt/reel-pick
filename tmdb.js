@@ -1,25 +1,10 @@
-/* Reel Pick: live TMDB v3 data layer. Discover/search films, posters, ratings and UK (GB) watch providers.
+/* Reel Pick: live TMDB v3 data layer. Discover/search films, posters, ratings, cast and trailers (no streaming-provider data).
    Key comes from config.js (generated from $TMDB_API_KEY) or an optional override saved in Settings.
    Without a working key everything falls back to the curated offline list in data.js. */
 (() => {
 'use strict';
 const API = 'https://api.themoviedb.org/3', IMG = 'https://image.tmdb.org/t/p/', REGION = 'GB';
 
-/* UK subscription services. Provider ids are re-resolved live from /watch/providers/movie?watch_region=GB
-   by name, so renames/new tiers (e.g. "Netflix Standard with Ads") are picked up; ids below are a fallback. */
-const SERVICES = {
-  N:{name:'Netflix',     short:'NETFLIX',  color:'#e50914', re:/^netflix/i,                       ids:[8,1796]},
-  P:{name:'Prime Video', short:'PRIME',    color:'#00a8e1', re:/^amazon prime video/i,            ids:[9,119,2100]},
-  D:{name:'Disney+',     short:'DISNEY+',  color:'#3d63ff', re:/^disney/i,                        ids:[337]},
-  A:{name:'Apple TV+',   short:'APPLE TV', color:'#c9c9d1', re:/^apple tv( ?\+| plus)?$/i,        ids:[350]},
-  S:{name:'Now / Sky',   short:'NOW',      color:'#00c2b0', re:/^(now( tv)?( cinema)?|sky go)$/i, ids:[39,29]},
-  M:{name:'HBO Max',     short:'MAX',      color:'#7a5cff', re:/^(hbo )?max$/i,                   ids:[1899,384]},
-  B:{name:'BBC iPlayer', short:'iPLAYER',  color:'#ff4c98', re:/^bbc iplayer/i,                   ids:[38]},
-  I:{name:'ITVX',        short:'ITVX',     color:'#d6f400', re:/^itvx/i,                          ids:[41]},
-  C:{name:'Channel 4',   short:'CH4',      color:'#b4b4c0', re:/^channel 4/i,                     ids:[103]},
-  U:{name:'Paramount+',  short:'PARAMOUNT+',color:'#2f7bff',re:/^paramount( ?\+| plus)( premium| basic.*)?$/i, ids:[531]},
-};
-const MAJOR = ['N','P','D','A','S','M'];
 
 let GENRES = {28:'Action',12:'Adventure',16:'Animation',35:'Comedy',80:'Crime',99:'Documentary',18:'Drama',10751:'Family',
   14:'Fantasy',36:'History',27:'Horror',10402:'Music',9648:'Mystery',10749:'Romance',878:'Sci-Fi',10770:'TV Movie',53:'Thriller',10752:'War',37:'Western'};
@@ -55,8 +40,8 @@ function get(path, params = {}){
   return p;
 }
 
-/* ---------- persistent light cache (runtime + providers) ---------- */
-const LC = 'reelpick.tcache.v1', TTL = 12*3600e3;
+/* ---------- persistent light cache (runtime) ---------- */
+const LC = 'reelpick.tcache.v2', TTL = 12*3600e3;
 let lcache = {}; try { lcache = JSON.parse(localStorage.getItem(LC)) || {}; } catch {}
 let lcT; function lsave(){ clearTimeout(lcT); lcT = setTimeout(()=>{ try{
   const ks = Object.keys(lcache); if (ks.length > 700) ks.sort((a,b)=>lcache[a].t-lcache[b].t).slice(0, ks.length-600).forEach(k=>delete lcache[k]);
@@ -78,29 +63,14 @@ function moodsFor(g){
 function norm(r){
   const g = (r.genre_ids || (r.genres||[]).map(x=>x.id)).map(id=>GENRES[id]).filter(n=>n && n!=='TV Movie');
   const m = { id:'tmdb-'+r.id, tmdb:r.id, src:'tmdb', t:r.title||r.original_title||'Untitled', y:+(r.release_date||'').slice(0,4)||null,
-    r:r.runtime||null, i:Math.round((r.vote_average||0)*10)/10, votes:r.vote_count||0, g, m:moodsFor(g), s:null, d:r.overview||'',
+    r:r.runtime||null, i:Math.round((r.vote_average||0)*10)/10, votes:r.vote_count||0, g, m:moodsFor(g), d:r.overview||'',
     poster:r.poster_path?IMG+'w342'+r.poster_path:'', backdrop:r.backdrop_path?IMG+'w1280'+r.backdrop_path:'' };
   const c = lcache[m.id]; if (c && Date.now()-c.t < TTL) applyLight(m, c);
   return m;
 }
-function applyLight(m, c){ if (c.r) m.r = c.r; m.s = c.s; m.wp = c.wp; }
-function codesFor(list){
-  const out = [];
-  for (const p of list||[]) for (const [k,v] of Object.entries(SERVICES))
-    if ((v.re.test(p.provider_name) || v.ids.includes(p.provider_id)) && !out.includes(k)) out.push(k);
-  return out;
-}
-function provSummary(gb){
-  gb = gb || {};
-  const L = (a, kind) => (a||[]).map(p=>({id:p.provider_id, n:p.provider_name, logo:p.logo_path?IMG+'w92'+p.logo_path:'', kind, code:codesFor([p])[0]||''}));
-  const flat = [...L(gb.flatrate,'Subscription'), ...L(gb.free,'Free'), ...L(gb.ads,'With ads')];
-  const seen = new Set(), dedup = a => a.filter(p => !seen.has(p.n) && seen.add(p.n));
-  return { link: gb.link||'', flat: dedup(flat), rent: L(gb.rent,'Rent').map(p=>p.n), buy: L(gb.buy,'Buy').map(p=>p.n),
-           s: codesFor([...(gb.flatrate||[]), ...(gb.free||[]), ...(gb.ads||[])]) };
-}
+function applyLight(m, c){ if (c.r) m.r = c.r; }
 
 /* ---------- query building ---------- */
-function providerIds(codes){ return [...new Set(codes.flatMap(c => SERVICES[c] ? SERVICES[c].ids : []))]; }
 const kwCache = {};
 async function keywordIds(mood){
   if (kwCache[mood]) return kwCache[mood];
@@ -127,8 +97,6 @@ async function discoverParams(c, o = {}){
   if (yF) p['primary_release_date.gte'] = yF + '-01-01';
   p['primary_release_date.lte'] = yT ? `${Math.min(yT, 2100)}-12-31` : today();
   if (c.minRating) p['vote_average.gte'] = c.minRating;
-  const svc = c.services ? [...c.services] : [];
-  if (c.onlyMine && svc.length){ p.with_watch_providers = providerIds(svc).join('|'); p.watch_region = REGION; p.with_watch_monetization_types = 'flatrate|free|ads'; }
   if (o.keywords && moods.length === 1){ const k = await keywordIds(moods[0]); if (k.length) p.with_keywords = k.join('|'); }
   if (c.prefer === 'classic') p['vote_count.gte'] = Math.max(p['vote_count.gte'], 2000);
   if (c.prefer === 'gem'){ p['vote_count.gte'] = 150; p['vote_count.lte'] = 2500; p['vote_average.gte'] = Math.max(c.minRating||0, 6.8); }
@@ -153,24 +121,24 @@ async function search(q, page = 1){
   const j = await get('/search/movie', {query:q, page, include_adult:false, language:'en-GB'});
   return { items:(j.results||[]).map(norm), total:j.total_results||0, pages:Math.min(j.total_pages||0, 500) };
 }
-/* Light enrichment for cards: runtime + UK providers (cached 12h). Full=true adds credits, trailer, tagline. */
+/* Light enrichment for live results: runtime (cached 12h). Full=true adds credits, trailer, tagline. */
 async function details(m, full = false){
   if (!live) return m;
   if (!m.tmdb){ // offline-list film: find it on TMDB by title + year
     const j = await get('/search/movie', {query:m.t.replace(/·/g,''), year:m.y, include_adult:false});
-    const hit = (j.results||[])[0]; if (!hit) { m.s = m.s || []; return m; }
+    const hit = (j.results||[])[0]; if (!hit) return m;
     m.tmdb = hit.id; if (hit.poster_path) m.poster = IMG+'w342'+hit.poster_path; if (hit.backdrop_path) m.backdrop = IMG+'w1280'+hit.backdrop_path;
     if (hit.vote_average) m.tmdbRating = Math.round(hit.vote_average*10)/10;
   }
   const c = lcache[m.id];
   if (!full && c && Date.now()-c.t < TTL) { applyLight(m, c); return m; }
-  const d = await get('/movie/'+m.tmdb, {language:'en-GB', append_to_response: full ? 'watch/providers,credits,videos' : 'watch/providers'});
-  const wp = provSummary(((d['watch/providers']||{}).results||{})[REGION]);
-  m.r = d.runtime || m.r; m.s = wp.s; m.wp = wp; m.imdb = d.imdb_id || m.imdb;
+  // No watch-provider data is requested: availability is irrelevant (Plex library). Runtime, artwork, cast and trailers only.
+  const d = await get('/movie/'+m.tmdb, full ? {language:'en-GB', append_to_response:'credits,videos'} : {language:'en-GB'});
+  m.r = d.runtime || m.r; m.imdb = d.imdb_id || m.imdb;
   if (m.src === 'tmdb'){ if (d.overview) m.d = d.overview; if (d.genres) { m.g = d.genres.map(x=>GENRES[x.id]||x.name).filter(n=>n!=='TV Movie'); } }
   if (d.poster_path && !m.poster) m.poster = IMG+'w342'+d.poster_path;
   if (d.backdrop_path) m.backdrop = IMG+'w1280'+d.backdrop_path;
-  lcache[m.id] = {t:Date.now(), r:m.r, s:m.s, wp}; lsave();
+  lcache[m.id] = {t:Date.now(), r:m.r}; lsave();
   if (full){
     const vids = (d.videos||{}).results||[];
     const vid = vids.find(v=>v.site==='YouTube' && v.type==='Trailer' && v.official) || vids.find(v=>v.site==='YouTube' && v.type==='Trailer');
@@ -199,30 +167,26 @@ async function init(override){
   live = false; lastError = null; mem.clear();
   if (!key) { lastError = 'no-key'; return false; }
   try {
-    const [g, prov] = await Promise.all([ get('/genre/movie/list', {language:'en'}), get('/watch/providers/movie', {watch_region:REGION, language:'en-GB'}) ]);
+    const g = await get('/genre/movie/list', {language:'en'});
     (g.genres||[]).forEach(x => { GENRES[x.id] = x.id===878 ? 'Sci-Fi' : x.name; });
-    for (const v of Object.values(SERVICES)) {
-      const ids = (prov.results||[]).filter(p => v.re.test(p.provider_name)).map(p=>p.provider_id);
-      if (ids.length) v.ids = [...new Set(ids)];
-    }
     live = true; return true;
   } catch (e) { lastError = e.status === 401 ? 'rejected' : 'network'; return false; }
 }
 /* Reachable-title counts. TMDB caps total_results at ~20k per query, so count in release-year bands and sum. Cached 24h. */
 const BANDS = [['1900','1959'],['1960','1979'],['1980','1989'],['1990','1999'],['2000','2006'],['2007','2009'],['2010','2013'],['2014','2016'],['2017','2020'],['2021','2023'],['2024','2027']];
 async function stats(){
-  try { const c = JSON.parse(localStorage.getItem('reelpick.tstats') || 'null'); if (c && Date.now() - c.t < 864e5) return c.v; } catch {}
+  try { const c = JSON.parse(localStorage.getItem('reelpick.tstats2') || 'null'); if (c && Date.now() - c.t < 864e5) return c.v; } catch {}
   const base = {include_adult:false, include_video:false};
   const band = ([a, b]) => ({'primary_release_date.gte': a + '-01-01', 'primary_release_date.lte': b + '-12-31'});
-  const ukp = {watch_region:REGION, with_watch_monetization_types:'flatrate|free|ads', with_watch_providers: providerIds(Object.keys(SERVICES)).join('|')};
+
   const count = ps => Promise.all(ps.map(p => get('/discover/movie', p).then(j => j.total_results || 0))).then(a => ({n: a.reduce((x, y) => x + y, 0), capped: a.some(x => x >= 20000)}));
-  const [all, uk] = await Promise.all([ count(BANDS.map(b => ({...base, 'vote_count.gte': 10, ...band(b)}))), count(BANDS.map(b => ({...base, ...ukp, ...band(b)}))) ]);
-  const v = { all: all.n, uk: uk.n, capped: all.capped || uk.capped };
-  try { localStorage.setItem('reelpick.tstats', JSON.stringify({t: Date.now(), v})); } catch {}
+  const all = await count(BANDS.map(b => ({...base, 'vote_count.gte': 10, ...band(b)})));
+  const v = { all: all.n, capped: all.capped };
+  try { localStorage.setItem('reelpick.tstats2', JSON.stringify({t: Date.now(), v})); } catch {}
   return v;
 }
 
-window.TMDB = { SERVICES, MAJOR, MOOD_Q, init, discover, search, details, enqueue, stats, moodsFor,
+window.TMDB = { MOOD_Q, init, discover, search, details, enqueue, stats, moodsFor,
   get live(){ return live; }, get error(){ return lastError; }, get usingOverride(){ return false; },
   set onAuthFail(f){ authFail = f; }, genreNames: () => Object.values(GENRES).filter(n=>n!=='TV Movie').sort(), keyKind: () => key ? (bearer?'v4 token':'v3 key') : 'none' };
 })();
