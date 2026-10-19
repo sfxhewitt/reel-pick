@@ -7,7 +7,7 @@
  {
   "check": "desktop: reach stats",
   "ok": true,
-  "detail": "{'all': 106056, 'capped': False}"
+  "detail": "{'all': 106073, 'capped': False}"
  },
  {
   "check": "desktop: hero poster loads from TMDB",
@@ -42,7 +42,7 @@
  {
   "check": "desktop: live discover (Comedy, 90\u2013120m) from TMDB",
   "ok": true,
-  "detail": "5,157 FILMS \u00b7 LIVE TMDB; 40 cards; runtimes ['1h 37m', '2h 10m', '1h 42m', '1h 43m', '1h 48m', '1h 30m']"
+  "detail": "5,156 FILMS \u00b7 LIVE TMDB; 40 cards; runtimes ['1h 37m', '2h 10m', '1h 42m', '1h 43m', '1h 48m', '1h 30m']"
  },
  {
   "check": "desktop: live discover posters load",
@@ -62,12 +62,12 @@
  {
   "check": "desktop: quiz returns 3 picks with mood-management 'why'",
   "ok": true,
-  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: comforting (80%), low-key (74%); 8.3 weighted rating from 12k votes."
+  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: uplifting (83%), light in tone (82%); 8.2 weighted rating from 22k votes."
  },
  {
   "check": "desktop: quiz exclusions filter the picks (no Comedy/Horror)",
   "ok": true,
-  "detail": "[['Fantasy', 'Animation', 'Adventure'], ['Family', 'Animation', 'Music', 'Adventure'], ['Animation', 'Adventure', 'Fantasy', 'Action']]"
+  "detail": "[['Family', 'Animation', 'Music', 'Adventure'], ['Family', 'Animation', 'Sci-Fi', 'Adventure'], ['Animation', 'Adventure', 'Fantasy', 'Action']]"
  },
  {
   "check": "desktop: quiz cards have no Like/Dislike, only Watchlist / Seen it / Not interested",
@@ -82,27 +82,27 @@
  {
   "check": "desktop: 'Seen it' marks seen and collapses the card out (animated)",
   "ok": true,
-  "detail": "['tmdb-4935', True, [True, '0.3s, 0.2s, 0.3s, 0.3s, 0.3s']]"
+  "detail": "['tmdb-354912', True, [True, '0.3s, 0.2s, 0.3s, 0.3s, 0.3s']]"
  },
  {
   "check": "desktop: removing the Top pick promotes the next pick and backfills to 3",
   "ok": true,
-  "detail": "[[{'id': 'tmdb-4935', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-354912', 'top': 'Also great', 'first': False}, {'id': 'tmdb-980431', 'top': 'Also great', 'first': False}], [{'id': 'tmdb-354912',"
+  "detail": "[[{'id': 'tmdb-354912', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-1184918', 'top': 'Also great', 'first': False}, {'id': 'tmdb-980431', 'top': 'Also great', 'first': False}], [{'id': 'tmdb-11849"
  },
  {
   "check": "desktop: 'Watchlist' adds to the watchlist and removes the card",
   "ok": true,
-  "detail": "['tmdb-980431', True, [{'id': 'tmdb-354912', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-980431', 'top': 'Also great', 'first': False}, {'id': 'tmdb-1184918', 'top': 'Also great', 'first': False}]"
+  "detail": "['tmdb-980431', True, [{'id': 'tmdb-1184918', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-980431', 'top': 'Also great', 'first': False}, {'id': 'tmdb-10681', 'top': 'Also great', 'first': False}],"
  },
  {
   "check": "desktop: 'Not interested' hides the film and removes the card",
   "ok": true,
-  "detail": "['tmdb-10681', True, [{'id': 'tmdb-354912', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-1184918', 'top': 'Also great', 'first': False}, {'id': 'tmdb-508442', 'top': 'Also great', 'first': False}]]"
+  "detail": "['tmdb-1007757', True, [{'id': 'tmdb-1184918', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-10681', 'top': 'Also great', 'first': False}, {'id': 'tmdb-8587', 'top': 'Also great', 'first': False}]]"
  },
  {
   "check": "desktop: dismissed films stay gone after re-render",
   "ok": true,
-  "detail": "[['tmdb-4935', 'tmdb-980431', 'tmdb-10681'], ['tmdb-354912', 'tmdb-1184918', 'tmdb-508442'], ['tmdb-354912', 'tmdb-1184918', 'tmdb-508442']]"
+  "detail": "[['tmdb-354912', 'tmdb-980431', 'tmdb-1007757'], ['tmdb-1184918', 'tmdb-10681', 'tmdb-8587'], ['tmdb-1184918', 'tmdb-10681', 'tmdb-8587']]"
  },
  {
   "check": "desktop: exclusions persist after reload and filter Tonight + Browse",
@@ -112,7 +112,7 @@
  {
   "check": "desktop: picker never repeats + skips logged + not-interested bans",
   "ok": true,
-  "detail": "[['tmdb-1585', 'cooldown', 1], ['tmdb-11216', 'cooldown', 1], ['tmdb-638507', 'cooldown', 1], ['tmdb-587', 'banned', 0]]"
+  "detail": "[['tmdb-11216', 'cooldown', 1], ['tmdb-1585', 'cooldown', 1], ['tmdb-4348', 'cooldown', 1], ['tmdb-587', 'banned', 0]]"
  },
  {
   "check": "desktop: no TMDB watch-provider requests",
@@ -137,7 +137,7 @@
  {
   "check": "iphone: reach stats",
   "ok": true,
-  "detail": "{'all': 106056, 'capped': False}"
+  "detail": "{'all': 106073, 'capped': False}"
  },
  {
   "check": "iphone: hero poster loads from TMDB",
@@ -172,7 +172,7 @@
  {
   "check": "iphone: live discover (Comedy, 90\u2013120m) from TMDB",
   "ok": true,
-  "detail": "5,157 FILMS \u00b7 LIVE TMDB; 40 cards; runtimes ['1h 37m', '2h 10m', '1h 42m', '1h 43m', '1h 48m', '1h 30m']"
+  "detail": "5,156 FILMS \u00b7 LIVE TMDB; 40 cards; runtimes ['1h 37m', '2h 10m', '1h 42m', '1h 43m', '1h 48m', '1h 30m']"
  },
  {
   "check": "iphone: live discover posters load",
@@ -192,12 +192,12 @@
  {
   "check": "iphone: quiz returns 3 picks with mood-management 'why'",
   "ok": true,
-  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: comforting (80%), low-key (74%); 8.3 weighted rating from 12k votes."
+  "detail": "Why this pick? You're stressed / wired and want a change, so we aimed to repair the mood; Matches what you asked for: uplifting (83%), light in tone (82%); 8.2 weighted rating from 22k votes."
  },
  {
   "check": "iphone: quiz exclusions filter the picks (no Comedy/Horror)",
   "ok": true,
-  "detail": "[['Fantasy', 'Animation', 'Adventure'], ['Family', 'Animation', 'Music', 'Adventure'], ['Animation', 'Adventure', 'Fantasy', 'Action']]"
+  "detail": "[['Family', 'Animation', 'Music', 'Adventure'], ['Family', 'Animation', 'Sci-Fi', 'Adventure'], ['Animation', 'Adventure', 'Fantasy', 'Action']]"
  },
  {
   "check": "iphone: quiz cards have no Like/Dislike, only Watchlist / Seen it / Not interested",
@@ -212,27 +212,27 @@
  {
   "check": "iphone: 'Seen it' marks seen and collapses the card out (animated)",
   "ok": true,
-  "detail": "['tmdb-4935', True, [True, '0.3s, 0.2s, 0.3s, 0.3s, 0.3s']]"
+  "detail": "['tmdb-354912', True, [True, '0.3s, 0.2s, 0.3s, 0.3s, 0.3s']]"
  },
  {
   "check": "iphone: removing the Top pick promotes the next pick and backfills to 3",
   "ok": true,
-  "detail": "[[{'id': 'tmdb-4935', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-354912', 'top': 'Also great', 'first': False}, {'id': 'tmdb-980431', 'top': 'Also great', 'first': False}], [{'id': 'tmdb-354912',"
+  "detail": "[[{'id': 'tmdb-354912', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-1184918', 'top': 'Also great', 'first': False}, {'id': 'tmdb-980431', 'top': 'Also great', 'first': False}], [{'id': 'tmdb-11849"
  },
  {
   "check": "iphone: 'Watchlist' adds to the watchlist and removes the card",
   "ok": true,
-  "detail": "['tmdb-980431', True, [{'id': 'tmdb-354912', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-980431', 'top': 'Also great', 'first': False}, {'id': 'tmdb-1184918', 'top': 'Also great', 'first': False}]"
+  "detail": "['tmdb-980431', True, [{'id': 'tmdb-1184918', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-980431', 'top': 'Also great', 'first': False}, {'id': 'tmdb-10681', 'top': 'Also great', 'first': False}],"
  },
  {
   "check": "iphone: 'Not interested' hides the film and removes the card",
   "ok": true,
-  "detail": "['tmdb-10681', True, [{'id': 'tmdb-354912', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-1184918', 'top': 'Also great', 'first': False}, {'id': 'tmdb-508442', 'top': 'Also great', 'first': False}]]"
+  "detail": "['tmdb-1007757', True, [{'id': 'tmdb-1184918', 'top': 'Top pick', 'first': True}, {'id': 'tmdb-10681', 'top': 'Also great', 'first': False}, {'id': 'tmdb-8587', 'top': 'Also great', 'first': False}]]"
  },
  {
   "check": "iphone: dismissed films stay gone after re-render",
   "ok": true,
-  "detail": "[['tmdb-4935', 'tmdb-980431', 'tmdb-10681'], ['tmdb-354912', 'tmdb-1184918', 'tmdb-508442'], ['tmdb-354912', 'tmdb-1184918', 'tmdb-508442']]"
+  "detail": "[['tmdb-354912', 'tmdb-980431', 'tmdb-1007757'], ['tmdb-1184918', 'tmdb-10681', 'tmdb-8587'], ['tmdb-1184918', 'tmdb-10681', 'tmdb-8587']]"
  },
  {
   "check": "iphone: exclusions persist after reload and filter Tonight + Browse",
@@ -242,7 +242,7 @@
  {
   "check": "iphone: picker never repeats + skips logged + not-interested bans",
   "ok": true,
-  "detail": "[['tmdb-1585', 'cooldown', 1], ['tmdb-11216', 'cooldown', 1], ['tmdb-638507', 'cooldown', 1], ['tmdb-587', 'banned', 0]]"
+  "detail": "[['tmdb-11216', 'cooldown', 1], ['tmdb-1585', 'cooldown', 1], ['tmdb-4348', 'cooldown', 1], ['tmdb-587', 'banned', 0]]"
  },
  {
   "check": "iphone: no TMDB watch-provider requests",
@@ -347,7 +347,7 @@
  {
   "check": "standalone: exclusions are hard filters in Tonight, Browse and Surprise",
   "ok": true,
-  "detail": "tonight=16 browse=48 surprise=[['Adventure', 'Animation', 'Family', 'Fantasy'], ['Animation', 'Adventure', 'Fantasy', 'Action'], ['Animation', 'Action', 'Fantasy'], ['Drama', 'Western'], ['Drama', 'My"
+  "detail": "tonight=16 browse=48 surprise=[['Adventure', 'Animation', 'Family', 'Fantasy'], ['Animation', 'Adventure', 'Fantasy', 'Action'], ['Animation', 'Action', 'Fantasy'], ['Drama', 'Western'], ['Drama', 'Th"
  },
  {
   "check": "standalone: no streaming-provider UI",

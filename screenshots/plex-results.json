@@ -32,7 +32,7 @@
  {
   "check": "auth page: app.plex.tv/auth with clientID, code, product, forwardUrl",
   "ok": true,
-  "detail": "https://app.plex.tv/auth#?clientID=c2fe9a8a-0785-4d38-a303-c85b55d3e919&code=MOCKCODE&context%5Bdevice%5D%5Bproduct%5D=Reel%20Pick&forwardUrl=http%3A%2F%2Flocalhost%3A47391%2F%23plexauth"
+  "detail": "https://app.plex.tv/auth#?clientID=7f4dc94e-09ac-4993-9263-4a4d9068ad53&code=MOCKCODE&context%5Bdevice%5D%5Bproduct%5D=Reel%20Pick&forwardUrl=http%3A%2F%2Flocalhost%3A47391%2F%23plexauth"
  },
  {
   "check": "settings shows 'Waiting for Plex\u2026' while the PIN is open",
@@ -72,7 +72,7 @@
  {
   "check": "Tonight cards: 'On Plex' badge exactly on owned films (incl. legacy IMDb guids)",
   "ok": true,
-  "detail": "[[278, True, True], [680, False, True], [687163, False, True], [238, True, True], [13, True, True], [372058, True, True], [424, False, True], [155, False, True], [129, True, True], [122, True, True], [157336, True, True], [496243, True, True], [240, True, True], [497, False, True]]"
+  "detail": "[[278, True, True], [680, False, True], [687163, False, True], [389, False, True], [424, False, True], [13, True, True], [155, False, True], [129, True, True], [157336, True, True], [122, True, True], [238, True, True], [496243, True, True], [240, True, True], [372058, True, True]]"
  },
  {
   "check": "Browse cards: badge matches library",
@@ -110,6 +110,31 @@
   "detail": "['true', 'false']"
  },
  {
+  "check": "Browse pin (Watchlist) adds to Plex watchlist + toast, second tap removes",
+  "ok": true,
+  "detail": "Added to your Plex watchlist: 12 Angry Men"
+ },
+ {
+  "check": "detail 'Watchlist' button adds to Plex watchlist",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "Plex failure shows a clear error with Retry; Retry adds it",
+  "ok": true,
+  "detail": "Plex watchlist add failed (HTTP 503): The Lord of the Rings: The Return of the King\nRetry"
+ },
+ {
+  "check": "Tonight hero 'Watchlist' adds to Plex watchlist",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "quiz 'Watchlist' adds to Plex watchlist and the card is still removed",
+  "ok": true,
+  "detail": "[True]"
+ },
+ {
   "check": "Browse 'Only on my Plex': every result owned",
   "ok": true,
   "detail": "300 FILMS IN CATALOGUE"
@@ -127,7 +152,7 @@
  {
   "check": "Tonight 'Only on my Plex': hero + row all owned",
   "ok": true,
-  "detail": "[14160, 14]"
+  "detail": "[165, 14]"
  },
  {
   "check": "filter choice + library cache survive reload",
