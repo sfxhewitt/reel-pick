@@ -142,9 +142,10 @@
       wlBusy = (async () => {
         try {
           const items = await pageAll(`${DISCOVER}/library/sections/watchlist/all?includeGuids=1&type=1`, auth.token);
-          const tmdb = {}, rks = [];
-          for (const it of items) { rks.push(String(it.ratingKey)); for (const id of idsFromGuids(it).tmdb) { tmdb[id] = String(it.ratingKey); match[id] = String(it.ratingKey); } }
-          wl = { t: now(), tmdb, rks, count: items.length }; put(K.wl, wl); put(K.match, match); status.wl = 'ok'; emit('watchlist'); return wl;
+          const tmdb = {}, rks = [], list = [];
+          for (const it of items) { rks.push(String(it.ratingKey));
+            list.push({ rk: String(it.ratingKey), t: it.title || '', y: it.year || null, thumb: it.thumb || '', tmdb: idsFromGuids(it).tmdb[0] || null }); for (const id of idsFromGuids(it).tmdb) { tmdb[id] = String(it.ratingKey); match[id] = String(it.ratingKey); } }
+          wl = { t: now(), tmdb, rks, items: list, count: items.length }; put(K.wl, wl); put(K.match, match); status.wl = 'ok'; emit('watchlist'); return wl;
         } catch (e) { status.wl = 'error'; emit('watchlist'); throw e; } finally { wlBusy = null; }
       })();
       return wlBusy;
@@ -201,8 +202,10 @@
       const rk = await ratingKeyFor(film);
       await req(`${DISCOVER}/actions/${on ? 'addToWatchlist' : 'removeFromWatchlist'}?ratingKey=${encodeURIComponent(rk)}`, { method: 'PUT' });
       wl = wl || { t: now(), tmdb: {}, rks: [], count: 0 };
-      if (on) { wl.tmdb[tmdbId] = rk; if (!wl.rks.includes(rk)) wl.rks.push(rk); }
-      else { delete wl.tmdb[tmdbId]; wl.rks = wl.rks.filter(x => x !== rk); }
+      wl.items = wl.items || [];
+      if (on) { wl.tmdb[tmdbId] = rk; if (!wl.rks.includes(rk)) { wl.rks.push(rk); wl.items.unshift({ rk, t: film.t || '', y: film.y || null, thumb: film.poster || '', tmdb: film.tmdb || null }); } }
+      else { delete wl.tmdb[tmdbId]; wl.rks = wl.rks.filter(x => x !== rk); wl.items = wl.items.filter(x => x.rk !== rk); }
+      wl.count = wl.rks.length;
       wl.count = wl.rks.length; put(K.wl, wl); emit('watchlist'); return on;
     }
 

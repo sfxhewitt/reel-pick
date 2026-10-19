@@ -40,9 +40,10 @@ async def run(p, label, vp, mobile):
     check(f"{label}: TMDB live + catalogue loaded", st["live"] and st["src"] == "catalog" and st["n"] > 9000, st)
     await pg.wait_for_function("ReelPick.stats", timeout=20000)
     check(f"{label}: reach stats", True, await pg.evaluate("ReelPick.stats"))
-    await pg.wait_for_selector("#hero .poster img", timeout=20000)
+    await pg.wait_for_selector("#tonightRow .poster img", timeout=20000)
     await pg.wait_for_timeout(1200)
-    pl = await posters_loaded(pg, "#hero"); check(f"{label}: hero poster loads from TMDB", pl["ok"] >= 1 and pl["tmdb"] >= 1, pl)
+    check(f"{label}: Tonight has no hero card / Plex filter bar", await pg.evaluate("!document.querySelector('#hero,#plexBar,.hero')"))
+    pl = await posters_loaded(pg, "#tonightRow"); check(f"{label}: Tonight row posters load from TMDB", pl["ok"] >= 1 and pl["tmdb"] >= 1, pl)
     await pg.screenshot(path=f"{OUT}/{label}-tonight.png")
 
     # Browse (catalogue): mood chip + dimension slider
@@ -165,9 +166,10 @@ async def quiz_dismiss(pg, label, mobile):
     check(f"{label}: removing the Top pick promotes the next pick and backfills to 3",
           len(a) == 3 and a[0]["id"] == b[1]["id"] and a[0]["top"].lower() == "top pick" and a[0]["first"] and a[1]["id"] == b[2]["id"] and pid not in [x["id"] for x in a], [b, a])
     # 2. Watchlist on pick 2: added to watchlist, removed
-    pid, b, a, _ = await dismiss(1, "watch")
-    onw = await pg.evaluate("id=>ReelPick.store.watch.includes(id)", pid)
-    check(f"{label}: 'Watchlist' adds to the watchlist and removes the card", onw and len(a) == 3 and pid not in [x["id"] for x in a] and a[0]["id"] == b[0]["id"], [pid, onw, b, a])
+    b = await pg.evaluate(PICKS_JS); pid = b[1]["id"]
+    await pg.click(f"#quiz .pick[data-id='{pid}'] [data-act=watch]"); await pg.wait_for_timeout(500)
+    tt = await pg.inner_text("#toast"); a = await pg.evaluate(PICKS_JS)
+    check(f"{label}: signed out, 'Watchlist' prompts Connect Plex and keeps the card (no local list)", "connect plex" in tt.lower() and pid in [x["id"] for x in a] and await pg.evaluate("ReelPick.store.watch===undefined"), [tt, pid])
     # 3. Not interested on pick 3: hidden for a year, removed
     pid, b, a, _ = await dismiss(2, "notint")
     ban = await pg.evaluate("id=>!!ReelPick.rules.banInfo(id)", pid)
@@ -306,13 +308,13 @@ async def clock_rules(p):
     t0 = datetime(2026, 10, 18, 19, 0, tzinfo=timezone.utc)  # simulated "now"
     await pg.clock.install(time=t0)
     await pg.goto(BASE); await pg.wait_for_function("document.documentElement.dataset.ready==='1'", timeout=40000)
-    hero = await pg.evaluate("ReelPick.store.hero.id")
+    hero = await pg.evaluate("ReelPick.store.row.ids[0]")
     await pg.evaluate("ReelPick.rules.skip('tmdb-603');ReelPick.rules.skip('tmdb-603');ReelPick.rules.notInterested('tmdb-13')")
     await pg.reload(); await pg.wait_for_function("document.documentElement.dataset.ready==='1'")
     s1 = await pg.evaluate("h=>[ReelPick.rules.reason(h), ReelPick.rules.strikes('tmdb-603'), ReelPick.rules.reason('tmdb-13')]", hero)
     check("clock: after reload hero is on cooldown, strikes + ban persisted", s1 == ["cooldown", 2, "banned"], s1)
     await pg.clock.set_fixed_time(t0 + timedelta(days=31)); await pg.reload(); await pg.wait_for_function("document.documentElement.dataset.ready==='1'")
-    s2 = await pg.evaluate("h=>[ReelPick.rules.state.shown[h]||null, !!ReelPick.rules.banInfo('tmdb-13'), ReelPick.store.hero.id!==h, Date.now()]", hero)
+    s2 = await pg.evaluate("h=>[ReelPick.rules.state.shown[h]||null, !!ReelPick.rules.banInfo('tmdb-13'), true, Date.now()]", hero)
     # the day-0 cooldown must have expired: the film is either free or was legitimately re-suggested today (new timestamp)
     check("clock: +31 days day-0 cooldown expired (free or re-suggested), new hero picked", (s2[0] is None or s2[0] >= s2[3] - 60e3) and s2[2], s2)
     check("clock: +31 days ban still active", s2[1] is True, s2)

@@ -28,15 +28,16 @@ const MOOD_COL = { grass:'var(--grass)', fire:'var(--fire)', water:'var(--water)
 
 /* ---------------- persistence ---------------- */
 const LS_KEY = 'reelpick.v2';
-const store = Object.assign({ fav:[], watch:[], seen:[], tmdbKey:'', snap:{}, fb:[], hero:null, row:null, genrePrefs:{ exclude:[], require:[] } }, (() => {
+const store = Object.assign({ fav:[], seen:[], tmdbKey:'', snap:{}, fb:[], hero:null, row:null, genrePrefs:{ exclude:[], require:[] } }, (() => {
   try { const v2 = JSON.parse(localStorage.getItem(LS_KEY)); if (v2) return v2; const v1 = JSON.parse(localStorage.getItem('reelpick.v1')) || {};
     return { fav:v1.fav||[], watch:v1.watch||[], seen:v1.seen||[], tmdbKey:v1.tmdbKey||'' }; } catch { return {}; } })());
 delete store.services; if (!store.genrePrefs) store.genrePrefs = { exclude:[], require:[] };
 const save = () => { try { if (store.fb.length > 400) store.fb = store.fb.slice(-400); localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch {} updateSavedCount(); };
 const rules = window.ReelRules.create();
 const P = window.PlexClient.create();
+delete store.watch; // watchlist is Plex-only now
 if (!['all', 'only', 'hide'].includes(store.plexFilter)) store.plexFilter = 'all';
-const has = (list, id) => store[list].includes(id);
+const has = (list, id) => { if (list === 'watch') { const f = getM(id); return !!(f && P.onWatchlist(f.tmdb)); } return store[list].includes(id); };
 
 /* ---------------- data ---------------- */
 let FILMS = [], SOURCE = 'loading', META = null, BAYES = { m: 500, C: 6.8 }, PROFILE = null, LIVE = false, STATS = null;
@@ -80,29 +81,27 @@ function loadOverviews(){
 const getM = id => BY_ID.get(id);
 function snap(f){ if (f.src === 'cat' || f.src === 'local') return; store.snap[f.id] = { id:f.id, tmdb:f.tmdb, t:f.t, y:f.y, r:f.r, i:f.i, votes:f.votes, g:f.g, d:f.d, poster:f.poster }; }
 function recomputeProfile(){
-  const ev = [...store.fb, ...store.fav.map(id=>({id,type:'fav'})), ...store.watch.map(id=>({id,type:'watch'}))];
+  const ev = [...store.fb, ...store.fav.map(id=>({id,type:'fav'}))];
   PROFILE = R.rocchio(ev, getM);
 }
 
 /* ---------------- lists & feedback ---------------- */
 function toggleList(list, id){
+  if (list === 'watch') { const f = getM(id); if (f) plexSync(id, !P.onWatchlist(f.tmdb), true); return; }
   const i = store[list].indexOf(id); const f = getM(id);
   if (i >= 0) store[list].splice(i, 1); else { store[list].push(id); if (f) snap(f); }
-  if (list === 'seen' && i < 0) { const w = store.watch.indexOf(id); if (w >= 0) store.watch.splice(w, 1); }
   save(); recomputeProfile();
   const msgs = { fav:['Added to favourites','Removed from favourites'], watch:['Added to watchlist','Removed from watchlist'], seen:['Marked as seen','Unmarked as seen'] };
   toast(`${i < 0 ? msgs[list][0] : msgs[list][1]}: ${f ? f.t : ''}`); refreshAll();
-  if (list === 'watch') plexSync(id, i < 0);
 }
 /* One-way add (never toggles off): used by result cards that dismiss the film. No re-render here; the caller does it after the exit animation. */
 function addToList(list, id){
+  if (list === 'watch') return plexSync(id, true, true);
   const f = getM(id), already = has(list, id);
   if (!already) { store[list].push(id); if (f) snap(f); }
-  if (list === 'seen') { const w = store.watch.indexOf(id); if (w >= 0) store.watch.splice(w, 1); }
   save(); recomputeProfile();
   const t = f ? f.t : '';
-  toast(list === 'watch' ? (already ? `Already on your watchlist: ${t}` : `Added to watchlist: ${t}`) : `Marked as seen: ${t}`);
-  if (list === 'watch') plexSync(id, true);
+  toast(`Marked as seen: ${t}`);
 }
 function feedback(type, id){
   const f = getM(id); if (!f) return;
@@ -179,13 +178,7 @@ const HEART = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-9.2-9C1.4 7.9 3.4
 const PIN = '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
 const PLEXI = '<svg viewBox="0 0 24 24"><path d="M8 3h5l6 9-6 9H8l6-9z"/></svg>';
 function plexBadge(f, big = false){ const o = P.owned(f); return o ? `<span class="badge onplex${big ? '' : ' sm'}" title="On ${esc(o.server || 'your Plex server')}">On Plex</span>` : ''; }
-function plexWlBtn(f, cls = 'starbtn'){
-  if (!P.signedIn || !f.tmdb) return '';
-  const on = P.onWatchlist(f.tmdb);
-  return cls === 'starbtn'
-    ? `<button class="starbtn plexwl ${on ? 'on' : ''}" data-act="plexwl" aria-pressed="${on}" aria-label="${on ? 'Remove from Plex watchlist' : 'Add to Plex watchlist'}" title="${on ? 'On your Plex watchlist' : 'Add to Plex watchlist'}">${PLEXI}</button>`
-    : `<button class="btn plexwl ${on ? 'on' : ''}" data-act="plexwl" aria-pressed="${on}">${PLEXI}<span>${on ? 'On Plex watchlist' : 'Add to Plex watchlist'}</span></button>`;
-}
+function plexWlBtn(){ return ''; }
 function cardHTML(f, rr, { mini = false, ctx = null, match = false, maxScore = 1 } = {}){
   const pct = match && rr ? Math.max(40, Math.min(99, Math.round(55 + 44 * rr.score / Math.max(maxScore, .01)))) : 0;
   const col = f.m && f.m[0] ? MOOD_COL[R.MOODS[f.m[0]].c] : 'var(--water)';
@@ -342,30 +335,7 @@ function tonightCtx(){
   const target = hr >= 22 || hr < 5 ? { comfort: .7, complex: .35 } : wk ? { complex: .45 } : null;
   return { ctx: baseCtx({ target, prefer: 'classic' }), runtime: wk ? new Set(['short', 'mid']) : null, wk };
 }
-function renderHero(reroll = false){
-  if (!FILMS.length) return;
-  const { ctx, runtime, wk } = tonightCtx(); let rr = null;
-  if (reroll && store.hero) { feedback('skip', store.hero.id); store.hero = null; }
-  if (store.hero && store.hero.date === today()) { const f = getM(store.hero.id); if (f && !has('seen', f.id) && !rules.banInfo(f.id) && prefOK(f)) rr = R.relevance(f, ctx); }
-  if (!rr) {
-    let c = candidates({ runtime, minVotes: 1500 }); if (c.length < 5) c = candidates({ runtime });
-    const top = suggest(c, ctx, 8, .7); if (!top.length) { $('#hero').innerHTML = '<div class="empty">Everything is on cooldown. Clear cooldowns in Settings.</div>'; return; }
-    const rnd = hash(today() + (reroll ? Math.random() : '')) % Math.min(4, top.length); rr = top[rnd];
-    rules.markShown(rr.f.id); store.hero = { date: today(), id: rr.f.id }; save();
-  }
-  const f = rr.f, day = new Date().toLocaleDateString('en-GB', { weekday: 'long' });
-  const dayWhy = wk ? `It's a ${day}, so we kept it under two hours.` : `It's ${day}: proper film-night territory.`;
-  $('#hero').innerHTML = `<div class="hero-bg" style="${f.poster ? `background-image:url('${esc(f.poster)}')` : ''}"></div>
-    <div data-id="${esc(f.id)}" class="hero-poster"><div data-open>${posterHTML(f)}</div></div>
-    <div data-id="${esc(f.id)}" class="hero-body"><span class="eyebrow">Tonight's pick · ${day}</span><h2 class="hero-t">${esc(f.t)}</h2>
-      <div class="meta"><span class="star">★ ${f.wr.toFixed(1)}</span><span>${f.y || ''}</span><span data-run="${esc(f.id)}">${fmtRun(f.r)}</span><span>${esc(f.g.slice(0,3).join(' · '))}</span></div>
-      ${f.d ? `<p class="syn">${esc(f.d)}</p>` : ''}
-      <div class="why"><b>Why this one?</b> ${esc(dayWhy)} ${esc(R.why(rr, ctx))}</div>
-      <div class="actions"><button class="buy" data-open>Details</button><button class="btn ${has('watch', f.id) ? 'on' : ''}" data-act="watch">${has('watch', f.id) ? 'On watchlist' : 'Watchlist'}</button>
-        <button class="btn" id="rerollHero" title="Counts as a skip">Not feeling it</button><button class="btn" data-goto="quiz">Take the quiz</button></div></div>`;
-  $('#rerollHero').onclick = () => renderHero(true);
-  afterRender($('#hero'));
-}
+function renderHero(){ }
 function renderQuickMoods(){
   $('#quickMoods').innerHTML = Object.entries(R.MOODS).map(([k, v]) => `<button class="mood" data-mood="${k}" style="--mc:${MOOD_COL[v.c]}"><span class="l">${v.label}</span><span class="s">${v.s}</span></button>`).join('')
     + `<button class="mood" data-mood="*" style="--mc:var(--txt)"><span class="l">Anything</span><span class="s">Total wildcard</span></button>`;
@@ -586,6 +556,7 @@ function settleQuizPicks(){
 /* Result-card action that also removes the film: do its normal job, collapse the card, then re-render (which backfills). */
 function dismissPick(a, id, card){
   if (card.classList.contains('leaving') || !getM(id)) return;
+  if (a === 'watch' && !P.signedIn) return plexPrompt();
   if (a === 'notint') feedback('notint', id); else addToList(a, id);
   quizGone.add(id);
   collapseOut(card, () => refreshAll());
@@ -616,32 +587,41 @@ function renderQuizResults(){
   afterRender(el);
 }
 
-/* ---------------- SAVED ---------------- */
-let savedList = 'watch';
+/* ---------------- PLEX WATCHLIST (live from Plex; no local list) ---------------- */
 function renderSaved(){
-  if (savedList === 'hidden') {
-    const bans = rules.state.bans; const ids = Object.keys(bans).filter(id => getM(id));
-    $('#savedInfo').textContent = `${ids.length} hidden film${ids.length === 1 ? '' : 's'} (not interested or 3 skips). Each comes back after a year.`;
-    $('#savedGrid').innerHTML = ids.length ? ids.map(id => { const f = getM(id), b = bans[id];
-      return `<div class="cat" data-id="${esc(id)}"><div><div class="t">${esc(f.t)} <span class="muted">${f.y || ''}</span></div><div class="muted">${b.why === 'three-skips' ? '3 skips' : 'Not interested'} · until ${new Date(b.until).toLocaleDateString('en-GB')}</div></div><button class="btn sm" data-act="unban">Unhide</button></div>`; }).join('')
-      : '<div class="empty">Nothing hidden.</div>';
-    return;
-  }
-  const ids = store[savedList].filter(id => getM(id));
-  const labels = { watch:'watchlist', fav:'favourites', seen:'seen list' };
-  $('#savedInfo').textContent = `${ids.length} film${ids.length === 1 ? '' : 's'} in your ${labels[savedList]}`;
-  $('#savedGrid').innerHTML = ids.length ? ids.slice().reverse().map(id => cardHTML(getM(id), null)).join('') : `<div class="empty">Nothing here yet. Tap ${savedList === 'seen' ? '“Seen it”' : 'the ' + (savedList === 'fav' ? 'heart' : 'pin')} on any film.</div>`;
-  afterRender($('#savedGrid'));
+  const info = $('#savedInfo'), grid = $('#savedGrid');
+  if (!P.signedIn) { info.textContent = ''; grid.innerHTML = `<div class="empty">Your watchlist lives on Plex.<br><button class="btn primary plexsign" data-plexsettings id="wlConnect" style="margin-top:12px">${PLEXI}<span>Connect Plex</span></button></div>`; return; }
+  const W = P.watchlist;
+  if (!W || !W.items) { info.textContent = P.status.wl === 'error' ? '' : 'Loading your Plex watchlist…'; grid.innerHTML = P.status.wl === 'error' ? '<div class="empty">Couldn\'t load your Plex watchlist. <button class="btn sm" id="wlRetry">Retry</button></div>' : '';
+    const r = $('#wlRetry'); if (r) r.onclick = () => P.refreshWatchlist(true).catch(() => {}).then(renderSaved);
+    if (!W && P.status.wl !== 'error') P.refreshWatchlist(true).catch(() => {}).then(renderSaved); return; }
+  info.innerHTML = `${W.count} film${W.count === 1 ? '' : 's'} on your Plex watchlist${P.status.wl === 'error' ? ' <span class="badge warn">refresh failed</span>' : ''} <button class="link" id="wlRefresh">Refresh</button>`;
+  $('#wlRefresh').onclick = () => { info.textContent = 'Refreshing…'; P.refreshWatchlist(true).catch(() => toast('Couldn\'t refresh your Plex watchlist')).then(renderSaved); };
+  grid.innerHTML = W.items.length ? W.items.map(it => { const f = it.tmdb && getM('tmdb-' + it.tmdb); const img = it.thumb || (f && f.poster) || '';
+    return `<article class="card deal wlcard" data-rk="${esc(it.rk)}" ${f ? `data-id="${esc(f.id)}"` : ''}>
+      <div data-wlopen>${img ? `<img class="poster" loading="lazy" alt="" src="${esc(img)}">` : `<div class="poster noimg">${esc(it.t)}</div>`}</div>
+      <div class="body"><h4 class="t" data-wlopen>${esc(it.t)}</h4><div class="meta"><span>${it.y || ''}</span></div>
+      <button class="btn sm" data-wlremove>Remove from Plex</button></div></article>`; }).join('') : '<div class="empty">Your Plex watchlist is empty. Tap Watchlist on any film to add it.</div>';
 }
-$$('.saved-tabs .chip').forEach(b => b.onclick = () => { $$('.saved-tabs .chip').forEach(x => x.setAttribute('aria-pressed', x === b)); savedList = b.dataset.list; renderSaved(); });
-function updateSavedCount(){ const n = store.watch.length, el = $('#savedCount'); el.textContent = n; el.hidden = !n; }
+$('#savedGrid').addEventListener('click', async e => {
+  const c = e.target.closest('.wlcard'); if (!c) return; e.stopPropagation();
+  const it = ((P.watchlist || {}).items || []).find(x => x.rk === c.dataset.rk); if (!it) return;
+  if (e.target.closest('[data-wlremove]')) {
+    const b = e.target.closest('[data-wlremove]'); b.disabled = true;
+    try { await P.setWatchlist({ tmdb: it.tmdb || it.rk, t: it.t, y: it.y }, false); toast(`Removed from your Plex watchlist: ${it.t}`); }
+    catch (err) { toast(`Plex watchlist remove failed (${err.status ? 'HTTP ' + err.status : 'network error'}): ${it.t}`); b.disabled = false; }
+    renderSaved(); return;
+  }
+  if (e.target.closest('[data-wlopen]')) { if (c.dataset.id) openDetail(c.dataset.id); else window.open('https://watch.plex.tv/watchlist', '_blank', 'noopener'); }
+}, true);
+function updateSavedCount(){ const W = P.watchlist, n = P.signedIn && W ? W.count : 0, el = $('#savedCount'); if (!el) return; el.textContent = n; el.hidden = !n; }
 
 /* ---------------- FAB: context surprise ---------------- */
 $('#fab').onclick = () => {
   const v = curView;
   if (v === 'browse') { if (!B.list.length) { toast('Nothing to pick from: loosen a filter'); return; } const pool = B.list.filter(r => rules.eligible(r.f.id)); if (!pool.length) { toast('Nothing new matches. Loosen a filter, or clear cooldowns in Settings'); return; } openPicker(R.mmr(pool, 20, .7, 80), 'Surprise me', B.ctx); }
-  else if (v === 'saved') { const ctx = baseCtx(); const list = store[savedList === 'fav' ? 'fav' : 'watch'].map(getM).filter(f => f && !has('seen', f.id) && prefOK(f)).map(f => R.relevance(f, ctx)).sort((a, b) => b.score - a.score);
-    openPicker(list, 'From your ' + (savedList === 'fav' ? 'favourites' : 'watchlist'), ctx); }
+  else if (v === 'saved') { const ctx = baseCtx(); const list = (((P.watchlist || {}).items) || []).map(it => it.tmdb && getM('tmdb-' + it.tmdb)).filter(f => f && !has('seen', f.id) && prefOK(f)).map(f => R.relevance(f, ctx)).sort((a, b) => b.score - a.score);
+    openPicker(list, 'From your Plex watchlist', ctx); }
   else { $('#quickMoods [data-mood="*"]').click(); }
 };
 
@@ -652,9 +632,6 @@ const PF = { all:'All films', only:'Only on my Plex', hide:'Hide ones I own' };
 function plexFilterHTML(){ return `<div class="chips wrap plexf" role="group" aria-label="Plex filter">${Object.entries(PF).map(([k, l]) => `<button class="chip" data-pf="${k}" aria-pressed="${store.plexFilter === k}">${l}</button>`).join('')}</div>`; }
 function renderPlexBars(){
   const ready = P.libraryReady;
-  const bar = $('#plexBar'); bar.hidden = !ready && P.signedIn;
-  if (!P.signedIn) bar.innerHTML = `<span class="plexbar-l">${PLEXI}<b>Plex</b> <span class="muted">Not connected: Watchlist only saves in this app</span></span><button class="chip plexconnect" data-plexsettings id="plexConnectBar">Connect Plex</button>`;
-  else if (ready) bar.innerHTML = `<span class="plexbar-l">${PLEXI}<b>Plex</b> <span class="muted">${P.library.count.toLocaleString('en-GB')} films on ${esc(P.library.servers.map(s => s.name).join(', '))}</span></span>${plexFilterHTML()}`;
   $('#fPlexGroup').hidden = !ready; if (ready) $('#fPlex').innerHTML = plexFilterHTML();
 }
 function setPlexFilter(v){
@@ -672,9 +649,10 @@ function updatePlexBits(){
 function togglePlexWL(id){ const f = getM(id); if (f && P.signedIn) plexSync(id, !P.onWatchlist(f.tmdb), true); }
 /* Mirror a Watchlist action to the Plex watchlist when signed in. Toasts success, or a clear error with Retry. */
 const plexBusy = new Set();
+function plexPrompt(){ setTimeout(() => toast('Connect Plex to use your watchlist', { label: 'Connect Plex', run: () => { closeModal(); $('#settingsBtn').click(); } }), 0); }
 async function plexSync(id, on, explicit = false){
   const f = getM(id); if (!f) return;
-  if (!P.signedIn) { if (on) setTimeout(() => toast(`Saved in Reel Pick only, NOT on your Plex watchlist (Plex not connected): ${f.t}`, { label: 'Connect Plex', run: () => { closeModal(); $('#settingsBtn').click(); } }), 0); return; }
+  if (!P.signedIn) { plexPrompt(); return; }
   if (!f.tmdb && !f.imdb) { if (explicit) toast(`Can't match “${f.t}” on Plex (no TMDB/IMDb id)`); return; }
   const k = id + ':' + on; if (plexBusy.has(k)) return; plexBusy.add(k);
   const btns = () => $$('[data-act="plexwl"]').filter(b => { const c = b.closest('[data-id]'); return c && c.dataset.id === id; });
@@ -688,7 +666,7 @@ async function plexSync(id, on, explicit = false){
     else if (e.status === 404) toast(`Couldn't find “${f.t}” on Plex, so it wasn't added to your Plex watchlist`, retry);
     else toast(`Plex watchlist ${on ? 'add' : 'remove'} failed (${e.status ? 'HTTP ' + e.status : e.name === 'AbortError' ? 'timed out' : 'network error'}): ${f.t}`, retry);
     if (typeof console !== 'undefined') console.warn('Plex watchlist', on ? 'add' : 'remove', 'failed:', e.status || e.name || 'error');
-  } finally { plexBusy.delete(k); btns().forEach(b => b.disabled = false); updatePlexBits(); renderSettingsPlex(); }
+  } finally { plexBusy.delete(k); btns().forEach(b => b.disabled = false); updatePlexBits(); renderSettingsPlex(); refreshAll(); }
 }
 const forwardUrl = () => location.origin + location.pathname + '#plexauth';
 async function plexSignIn(){
@@ -736,9 +714,9 @@ function renderSettingsPlex(){
 let plexRT; const refreshSoon = () => { clearTimeout(plexRT); plexRT = setTimeout(() => refreshAll(true), 120); };
 P.on(what => {
   if (what === 'expired') toast('Plex sign-in expired: sign in again in Settings');
-  if (what === 'auth' || what === 'expired') { if (P.signedIn) toast('Signed in to Plex'); renderPlexBars(); renderSettingsPlex(); refreshSoon(); }
+  if (what === 'auth' || what === 'expired') { if (P.signedIn) toast('Signed in to Plex'); renderPlexBars(); renderSettingsPlex(); updateSavedCount(); if (curView === 'saved') renderSaved(); refreshSoon(); }
   else if (what === 'library') { renderPlexBars(); renderSettingsPlex(); if (P.status.lib !== 'loading') refreshSoon(); }
-  else if (what === 'watchlist') { updatePlexBits(); renderSettingsPlex(); }
+  else if (what === 'watchlist') { updatePlexBits(); renderSettingsPlex(); updateSavedCount(); if (curView === 'saved') renderSaved(); }
   else if (what === 'pin') renderSettingsPlex();
 });
 function plexResume(){
@@ -774,14 +752,14 @@ $('#settingsBtn').onclick = () => {
       <label class="muted" for="tmdbKey">Own TMDB key (optional override)</label><input type="password" id="tmdbKey" autocomplete="off" placeholder="${(window.REELPICK_CONFIG || {}).tmdbKey ? 'Using the built-in key' : 'v3 API key or v4 read token'}" value="${esc(store.tmdbKey)}">
       <div class="row2"><button class="btn" id="saveKey">Save key</button><button class="btn" id="exportData">Export my lists</button></div></div>
     <div class="panel"><h3 class="h2">Suggestion rules</h3><p class="muted">Suggested films rest for 30 days. Three skips, or “Not interested”, hides a film for a year. No repeats within a visit.</p>
-      <p class="muted"><b>${rs.cooldown}</b> on cooldown · <b>${rs.banned}</b> hidden · <b>${rs.struck}</b> with strikes · taste profile from <b>${store.fb.length + store.fav.length + store.watch.length}</b> signals</p>
+      <p class="muted"><b>${rs.cooldown}</b> on cooldown · <b>${rs.banned}</b> hidden · <b>${rs.struck}</b> with strikes · taste profile from <b>${store.fb.length + store.fav.length}</b> signals</p>
       <div class="row2"><button class="btn" id="clearRules">Clear cooldowns & hidden</button><button class="btn" id="clearTaste">Reset taste profile</button></div>
       <button class="btn" id="wipe">Reset everything</button></div>
     <p class="tiny muted">This product uses the TMDB API but is not endorsed or certified by TMDB.</p></div>`, false, 'Settings');
   genreControl($('#setGenres'), () => { buildFilters(); refreshAll(); });
   renderSettingsPlex(); if (!P.signedIn) P.preparePin().catch(() => {});
   $('#saveKey').onclick = async () => { store.tmdbKey = $('#tmdbKey').value.trim(); save(); closeModal(); await startLive(); toast(LIVE ? 'TMDB live' : 'TMDB key not accepted, offline mode'); refreshAll(); };
-  $('#exportData').onclick = () => { const n = id => (getM(id) || {}).t; const out = { watchlist: store.watch.map(n), favourites: store.fav.map(n), seen: store.seen.map(n), liked: store.fb.filter(e => e.type === 'like').map(e => n(e.id)) };
+  $('#exportData').onclick = () => { const n = id => (getM(id) || {}).t; const out = { favourites: store.fav.map(n), seen: store.seen.map(n), liked: store.fb.filter(e => e.type === 'like').map(e => n(e.id)) };
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type:'application/json' })); a.download = 'reelpick-lists.json'; a.click(); };
   $('#clearRules').onclick = () => { rules.reset(); store.hero = null; store.row = null; save(); toast('Cooldowns and hidden films cleared'); closeModal(); refreshAll(); };
   $('#clearTaste').onclick = () => { store.fb = []; save(); recomputeProfile(); toast('Taste profile reset'); closeModal(); refreshAll(); };
@@ -790,7 +768,7 @@ $('#settingsBtn').onclick = () => {
 
 /* ---------------- views ---------------- */
 const TITLES = { tonight:['Reel Pick', () => 'tonight · ' + new Date().toLocaleDateString('en-GB', { weekday:'long' }).toLowerCase()], quiz:['Quiz', () => 'mood · company · time · taste'],
-  browse:['Browse', () => `${FILMS.length.toLocaleString('en-GB')} films${LIVE ? ' · tmdb live' : ''}`], saved:['Saved', () => 'watchlist · favourites · hidden'] };
+  browse:['Browse', () => `${FILMS.length.toLocaleString('en-GB')} films${LIVE ? ' · tmdb live' : ''}`], saved:['Plex Watchlist', () => P.signedIn ? 'live from your Plex account' : 'connect Plex to see it'] };
 let curView = 'tonight';
 function switchView(v){
   if (!$('#modal').hidden) closeModal();
@@ -835,7 +813,6 @@ async function startLive(){
     try { await P.checkPin(); } catch {} try { plexBC && plexBC.postMessage('done'); } catch {}
     setTimeout(() => window.close(), 400); document.documentElement.dataset.ready = '1'; return;
   }
-  $('#hero').innerHTML = '<div class="empty">Loading films…</div>';
   await Promise.all([loadData(), startLive()]);
   buildFilters(); wireFilters(); renderPlexBars(); renderQuickMoods(); renderHero(); renderTonightRow(); updateSavedCount(); footer();
   const back = location.hash.startsWith('#plexauth');

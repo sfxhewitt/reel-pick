@@ -17,8 +17,6 @@
 <button id="settingsBtn" class="iconbtn" aria-label="Settings"><svg><use href="#i-gear"/></svg></button></header>
 <main id="main">
   <section id="view-tonight" class="view active">
-    <div id="plexBar" class="plexbar" hidden></div>
-    <div id="hero" class="hero"></div>
     <h2 class="h2">Quick vibe <span class="muted">tap a mood, we'll surprise you</span></h2>
     <div id="quickMoods" class="mood-grid"></div>
     <div class="row-head"><h2 class="h2">Top-rated picks</h2><button class="link" data-goto="browse">Browse all →</button></div>
@@ -59,8 +57,7 @@
   </section>
 
   <section id="view-saved" class="view">
-    <div class="chips sticky saved-tabs"><button class="chip" aria-pressed="true" data-list="watch">Watchlist</button><button class="chip" aria-pressed="false" data-list="fav">Favourites</button><button class="chip" aria-pressed="false" data-list="seen">Seen</button><button class="chip" aria-pressed="false" data-list="hidden">Hidden</button></div>
-    <p id="savedInfo" class="muted"></p>
+        <p id="savedInfo" class="muted"></p>
     <div id="savedGrid" class="grid"></div>
   </section>
   <footer class="foot muted tiny" id="foot"></footer>
@@ -74,7 +71,7 @@
  <button data-view="tonight" class="active"><svg><use href="#i-moon"/></svg><span>Tonight</span></button>
  <button data-view="quiz"><svg><use href="#i-quiz"/></svg><span>Quiz</span></button>
  <button data-view="browse"><svg><use href="#i-grid"/></svg><span>Browse</span></button>
- <button data-view="saved"><svg><use href="#i-pin"/></svg><span>Saved</span><span id="savedCount" class="nbadge" hidden></span></button>
+ <button data-view="saved"><svg><use href="#i-pin"/></svg><span>Watchlist</span><span id="savedCount" class="nbadge" hidden></span></button>
 </nav>
 <script src="config.js"></script>
 <script src="data.js"></script>
