@@ -592,11 +592,11 @@ function renderSaved(){
   const info = $('#savedInfo'), grid = $('#savedGrid');
   if (!P.signedIn) { info.textContent = ''; grid.innerHTML = `<div class="empty">Your watchlist lives on Plex.<br><button class="btn primary plexsign" data-plexsettings id="wlConnect" style="margin-top:12px">${PLEXI}<span>Connect Plex</span></button></div>`; return; }
   const W = P.watchlist;
-  if (!W || !W.items) { info.textContent = P.status.wl === 'error' ? '' : 'Loading your Plex watchlist…'; grid.innerHTML = P.status.wl === 'error' ? '<div class="empty">Couldn\'t load your Plex watchlist. <button class="btn sm" id="wlRetry">Retry</button></div>' : '';
+  if (!W || !W.items) { info.textContent = P.status.wl === 'error' ? '' : 'Loading your Plex watchlist…'; grid.innerHTML = P.status.wl === 'error' ? `<div class="empty">Couldn't load your Plex watchlist (${esc(P.status.wlError || 'unknown error')}). <button class="btn sm" id="wlRetry">Retry</button></div>` : '';
     const r = $('#wlRetry'); if (r) r.onclick = () => P.refreshWatchlist(true).catch(() => {}).then(renderSaved);
-    if (!W && P.status.wl !== 'error') P.refreshWatchlist(true).catch(() => {}).then(renderSaved); return; }
+    if ((!W || !W.items) && P.status.wl !== 'error') P.refreshWatchlist(true).catch(() => {}).then(renderSaved); return; }
   info.innerHTML = `${W.count} film${W.count === 1 ? '' : 's'} on your Plex watchlist${P.status.wl === 'error' ? ' <span class="badge warn">refresh failed</span>' : ''} <button class="link" id="wlRefresh">Refresh</button>`;
-  $('#wlRefresh').onclick = () => { info.textContent = 'Refreshing…'; P.refreshWatchlist(true).catch(() => toast('Couldn\'t refresh your Plex watchlist')).then(renderSaved); };
+  $('#wlRefresh').onclick = () => { info.textContent = 'Refreshing…'; P.refreshWatchlist(true).catch(() => toast(`Couldn't refresh your Plex watchlist (${P.status.wlError})`)).then(renderSaved); };
   grid.innerHTML = W.items.length ? W.items.map(it => { const f = it.tmdb && getM('tmdb-' + it.tmdb); const img = it.thumb || (f && f.poster) || '';
     return `<article class="card deal wlcard" data-rk="${esc(it.rk)}" ${f ? `data-id="${esc(f.id)}"` : ''}>
       <div data-wlopen>${img ? `<img class="poster" loading="lazy" alt="" src="${esc(img)}">` : `<div class="poster noimg">${esc(it.t)}</div>`}</div>
@@ -609,7 +609,7 @@ $('#savedGrid').addEventListener('click', async e => {
   if (e.target.closest('[data-wlremove]')) {
     const b = e.target.closest('[data-wlremove]'); b.disabled = true;
     try { await P.setWatchlist({ tmdb: it.tmdb || it.rk, t: it.t, y: it.y }, false); toast(`Removed from your Plex watchlist: ${it.t}`); }
-    catch (err) { toast(`Plex watchlist remove failed (${err.status ? 'HTTP ' + err.status : 'network error'}): ${it.t}`); b.disabled = false; }
+    catch (err) { toast(`Plex watchlist remove failed (${err.status ? 'HTTP ' + err.status : 'network error'}${err.reason ? ': ' + err.reason : ''}): ${it.t}`); b.disabled = false; }
     renderSaved(); return;
   }
   if (e.target.closest('[data-wlopen]')) { if (c.dataset.id) openDetail(c.dataset.id); else window.open('https://watch.plex.tv/watchlist', '_blank', 'noopener'); }
@@ -664,7 +664,7 @@ async function plexSync(id, on, explicit = false){
     const retry = { label: 'Retry', run: () => plexSync(id, on, explicit) };
     if (e.status === 401 || !P.signedIn) toast('Plex sign-in expired: sign in again in Settings', { label: 'Settings', run: () => { closeModal(); $('#settingsBtn').click(); } });
     else if (e.status === 404) toast(`Couldn't find “${f.t}” on Plex, so it wasn't added to your Plex watchlist`, retry);
-    else toast(`Plex watchlist ${on ? 'add' : 'remove'} failed (${e.status ? 'HTTP ' + e.status : e.name === 'AbortError' ? 'timed out' : 'network error'}): ${f.t}`, retry);
+    else toast(`Plex watchlist ${on ? 'add' : 'remove'} failed (${e.status ? 'HTTP ' + e.status : e.name === 'AbortError' ? 'timed out' : 'network error'}${e.reason ? ': ' + e.reason : ''}): ${f.t}`, retry);
     if (typeof console !== 'undefined') console.warn('Plex watchlist', on ? 'add' : 'remove', 'failed:', e.status || e.name || 'error');
   } finally { plexBusy.delete(k); btns().forEach(b => b.disabled = false); updatePlexBits(); renderSettingsPlex(); refreshAll(); }
 }
@@ -699,7 +699,7 @@ function plexPanelHTML(){
   const u = P.user, W = P.watchlist;
   return `<h3 class="h2">Plex</h3><p class="muted" id="plexUser"><span class="badge ok">Signed in</span> ${u ? `as <b>${esc(u.name)}</b>` : ''}</p>
     <p class="muted" id="plexLib">${plexLibLine()}</p>
-    <p class="muted" id="plexWl">Plex watchlist: <b>${W ? W.count : '…'}</b> film${W && W.count === 1 ? '' : 's'}${P.status.wl === 'error' ? ' <span class="badge warn">couldn\'t load</span>' : ''}</p>
+    <p class="muted" id="plexWl">Plex watchlist: <b>${W ? W.count : '…'}</b> film${W && W.count === 1 ? '' : 's'}${P.status.wl === 'error' ? ` <span class="badge warn">couldn't load: ${esc(P.status.wlError || '')}</span>` : ''}</p>
     ${P.libraryReady ? `<p class="muted tiny">Show in Tonight & Browse:</p>${plexFilterHTML()}` : ''}
     <div class="row2"><button class="btn" id="plexRefresh">Refresh library</button><button class="btn" id="plexSignOut">Sign out</button></div>`;
 }

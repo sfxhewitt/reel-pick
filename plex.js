@@ -57,7 +57,7 @@
     let wl = get(K.wl);                 // { t, tmdb:{id:rk}, rks:[rk], count }
     let match = get(K.match) || {};     // { tmdbId: rk | 0 (no match) }
     let libBusy = null, wlBusy = null, pollT = null;
-    const status = { lib: lib ? (lib.status || 'ok') : 'none', libError: '', wl: wl ? 'ok' : 'none' };
+    const status = { lib: lib ? (lib.status || 'ok') : 'none', libError: '', wlError: '', wl: wl ? 'ok' : 'none' };
     const servers = new Map();          // machineId -> { uri, token, name } (memory only)
 
     function headers(token, extra = {}) {
@@ -72,7 +72,9 @@
       try {
         const r = await fetchFn(url, { method, headers: headers(token, hx), signal: ac ? ac.signal : undefined, mode: 'cors', credentials: 'omit' });
         if (r.status === 401 && token && auth && token === auth.token) { signOut('expired'); }
-        if (!r.ok) { const e = new Error('Plex HTTP ' + r.status); e.status = r.status; throw e; }
+        if (!r.ok) { const e = new Error('Plex HTTP ' + r.status); e.status = r.status;
+          try { const b = r.text ? await r.text() : ''; let m = b; try { const j = JSON.parse(b); m = (j.Error && (j.Error.message || j.Error.error)) || (j.errors && j.errors[0] && j.errors[0].message) || b; } catch {} e.reason = String(m || '').replace(/\s+/g, ' ').slice(0, 120); } catch {}
+          throw e; }
         const ct = r.headers && r.headers.get ? (r.headers.get('content-type') || '') : '';
         return ct.includes('json') ? r.json() : (r.text ? r.text().then(x => { try { return JSON.parse(x); } catch { return {}; } }) : {});
       } finally { if (t) clearTimeout(t); }
@@ -141,12 +143,16 @@
       if (wlBusy) return wlBusy;
       wlBusy = (async () => {
         try {
-          const items = await pageAll(`${DISCOVER}/library/sections/watchlist/all?includeGuids=1&type=1`, auth.token);
+          // Same params as watch.plex.tv (size 50); fall back to the bare endpoint if Plex rejects the params.
+          let items;
+          try { items = await pageAll(`${DISCOVER}/library/sections/watchlist/all?includeCollections=1&includeExternalMedia=1&includeGuids=1`, auth.token, 50); }
+          catch (e1) { if (e1.status === 401) throw e1; items = await pageAll(`${DISCOVER}/library/sections/watchlist/all`, auth.token, 50); }
+          items = items.filter(it => !it.type || it.type === 'movie');
           const tmdb = {}, rks = [], list = [];
           for (const it of items) { rks.push(String(it.ratingKey));
             list.push({ rk: String(it.ratingKey), t: it.title || '', y: it.year || null, thumb: it.thumb || '', tmdb: idsFromGuids(it).tmdb[0] || null }); for (const id of idsFromGuids(it).tmdb) { tmdb[id] = String(it.ratingKey); match[id] = String(it.ratingKey); } }
-          wl = { t: now(), tmdb, rks, items: list, count: items.length }; put(K.wl, wl); put(K.match, match); status.wl = 'ok'; emit('watchlist'); return wl;
-        } catch (e) { status.wl = 'error'; emit('watchlist'); throw e; } finally { wlBusy = null; }
+          wl = { t: now(), tmdb, rks, items: list, count: items.length }; put(K.wl, wl); put(K.match, match); status.wl = 'ok'; status.wlError = ''; emit('watchlist'); return wl;
+        } catch (e) { status.wl = 'error'; status.wlError = (e.status ? 'HTTP ' + e.status : e.name === 'AbortError' ? 'timed out' : 'network error: ' + (e.message || e.name || '?')) + (e.reason ? ': ' + e.reason : ''); emit('watchlist'); throw e; } finally { wlBusy = null; }
       })();
       return wlBusy;
     }
