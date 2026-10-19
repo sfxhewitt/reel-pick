@@ -652,8 +652,9 @@ const PF = { all:'All films', only:'Only on my Plex', hide:'Hide ones I own' };
 function plexFilterHTML(){ return `<div class="chips wrap plexf" role="group" aria-label="Plex filter">${Object.entries(PF).map(([k, l]) => `<button class="chip" data-pf="${k}" aria-pressed="${store.plexFilter === k}">${l}</button>`).join('')}</div>`; }
 function renderPlexBars(){
   const ready = P.libraryReady;
-  const bar = $('#plexBar'); bar.hidden = !ready;
-  if (ready) bar.innerHTML = `<span class="plexbar-l">${PLEXI}<b>Plex</b> <span class="muted">${P.library.count.toLocaleString('en-GB')} films on ${esc(P.library.servers.map(s => s.name).join(', '))}</span></span>${plexFilterHTML()}`;
+  const bar = $('#plexBar'); bar.hidden = !ready && P.signedIn;
+  if (!P.signedIn) bar.innerHTML = `<span class="plexbar-l">${PLEXI}<b>Plex</b> <span class="muted">Not connected: Watchlist only saves in this app</span></span><button class="chip plexconnect" data-plexsettings id="plexConnectBar">Connect Plex</button>`;
+  else if (ready) bar.innerHTML = `<span class="plexbar-l">${PLEXI}<b>Plex</b> <span class="muted">${P.library.count.toLocaleString('en-GB')} films on ${esc(P.library.servers.map(s => s.name).join(', '))}</span></span>${plexFilterHTML()}`;
   $('#fPlexGroup').hidden = !ready; if (ready) $('#fPlex').innerHTML = plexFilterHTML();
 }
 function setPlexFilter(v){
@@ -672,7 +673,8 @@ function togglePlexWL(id){ const f = getM(id); if (f && P.signedIn) plexSync(id,
 /* Mirror a Watchlist action to the Plex watchlist when signed in. Toasts success, or a clear error with Retry. */
 const plexBusy = new Set();
 async function plexSync(id, on, explicit = false){
-  const f = getM(id); if (!f || !P.signedIn) return;
+  const f = getM(id); if (!f) return;
+  if (!P.signedIn) { if (on) setTimeout(() => toast(`Saved in Reel Pick only, NOT on your Plex watchlist (Plex not connected): ${f.t}`, { label: 'Connect Plex', run: () => { closeModal(); $('#settingsBtn').click(); } }), 0); return; }
   if (!f.tmdb && !f.imdb) { if (explicit) toast(`Can't match “${f.t}” on Plex (no TMDB/IMDb id)`); return; }
   const k = id + ':' + on; if (plexBusy.has(k)) return; plexBusy.add(k);
   const btns = () => $$('[data-act="plexwl"]').filter(b => { const c = b.closest('[data-id]'); return c && c.dataset.id === id; });
