@@ -1,6 +1,6 @@
 /* Reel Pick: movie chooser. Static, no build step.
    Data: data/catalog.json (10k films with build-time affect scores) -> fallback data.js (170 curated films).
-   Live TMDB (tmdb.js): backdrops/cast/trailers, runtimes, search + discover beyond the catalogue. No streaming-provider data.
+   Live TMDB (tmdb.js): backdrops/cast/trailers, runtimes, search + discover beyond the catalogue. UK where-to-watch (TMDB/JustWatch) in the detail sheet.
    Recommender: reco.js. Suggestion rules (30-day cooldown, 3 strikes, not interested): rules.js. */
 (() => {
 'use strict';
@@ -258,6 +258,12 @@ document.addEventListener('keydown', e => {
   if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length-1].focus(); } else if (!e.shiftKey && document.activeElement === f[f.length-1]) { e.preventDefault(); f[0].focus(); }
 });
 const DIM_BARS = [['V','Valence','bleak','uplifting'],['A','Intensity','calm','intense'],['dark','Darkness'],['humour','Humour'],['complex','Complexity'],['pace','Pace'],['weight','Tearjerker'],['comfort','Comfort']];
+/* UK where-to-watch from TMDB watch/providers (data by JustWatch, attribution required). */
+function watchHTML(w){
+  if (!w || (!w.stream.length && !w.rent.length)) return '';
+  const row = (l, ps) => ps.length ? `<div class="dv-watch"><span>${l}</span>${ps.map(p => p.l ? `<img src="${esc(p.l)}" alt="${esc(p.n)}" title="${esc(p.n)}" loading="lazy">` : `<b>${esc(p.n)}</b>`).join('')}</div>` : '';
+  return `<section class="dv-sec"><h4>Where to watch (UK) <small>${w.link ? `<a target="_blank" rel="noopener" href="${esc(w.link)}">JustWatch</a>` : 'JustWatch'}</small></h4>${row('Stream', w.stream)}${row('Rent / buy', w.rent)}</section>`;
+}
 function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
   const x = f.extra || {}; const q = encodeURIComponent(f.t + ' ' + (f.y || ''));
   const onW = has('watch', f.id), onF = has('fav', f.id), onS = has('seen', f.id), fb = fbOf(f.id), own = P.owned(f);
@@ -290,6 +296,7 @@ function detailHTML(f, rr, { title = '', again = false, ctx = null } = {}){
         ${x.director && x.director.length ? `<div class="dv-credit"><span>Directed by</span> <b>${esc(listJoin(x.director))}</b></div>` : ''}
         <section class="dv-sec"><h4>Mood profile <small>${f.jev ? 'TypeSafe Jev' : f.src === 'cat' ? 'estimated from genres & keywords' : 'estimated from genres'}</small></h4><div class="bars">${bars}</div><div class="tags">${moodBadges(f)}${flags}</div></section>
         ${cast}
+        ${watchHTML(x.watch)}
       </div>
       <aside class="dv-side"><section class="dv-sec panel dv-more"><h4>More</h4>
           <a class="dv-link" target="_blank" rel="noopener" href="${f.imdb ? 'https://www.imdb.com/title/' + esc(f.imdb) + '/' : 'https://www.imdb.com/find/?q=' + q}">IMDb ${ico('ext')}</a>

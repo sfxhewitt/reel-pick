@@ -132,8 +132,8 @@ async function details(m, full = false){
   }
   const c = lcache[m.id];
   if (!full && c && Date.now()-c.t < TTL) { applyLight(m, c); return m; }
-  // No watch-provider data is requested: availability is irrelevant (Plex library). Runtime, artwork, cast and trailers only.
-  const d = await get('/movie/'+m.tmdb, full ? {language:'en-GB', append_to_response:'credits,videos'} : {language:'en-GB'});
+  // Full detail also asks for UK watch providers (TMDB's JustWatch data, same key) so the sheet can show where it streams in the UK.
+  const d = await get('/movie/'+m.tmdb, full ? {language:'en-GB', append_to_response:'credits,videos,watch/providers'} : {language:'en-GB'});
   m.r = d.runtime || m.r; m.imdb = d.imdb_id || m.imdb;
   if (m.src === 'tmdb'){ if (d.overview) m.d = d.overview; if (d.genres) { m.g = d.genres.map(x=>GENRES[x.id]||x.name).filter(n=>n!=='TV Movie'); } }
   if (d.poster_path && !m.poster) m.poster = IMG+'w342'+d.poster_path;
@@ -144,7 +144,9 @@ async function details(m, full = false){
     const vid = vids.find(v=>v.site==='YouTube' && v.type==='Trailer' && v.official) || vids.find(v=>v.site==='YouTube' && v.type==='Trailer');
     m.extra = { tagline:d.tagline||'', director:((d.credits||{}).crew||[]).filter(x=>x.job==='Director').map(x=>x.name).slice(0,2),
       cast:((d.credits||{}).cast||[]).slice(0,10).map(x=>({n:x.name, c:x.character, p:x.profile_path?IMG+'w185'+x.profile_path:''})),
-      trailer: vid ? 'https://www.youtube.com/watch?v='+vid.key : '' };
+      trailer: vid ? 'https://www.youtube.com/watch?v='+vid.key : '',
+      watch: (() => { const gb = ((d['watch/providers']||{}).results||{}).GB; if (!gb) return null; const pick = k => (gb[k]||[]).slice(0,6).map(p=>({n:p.provider_name, l:p.logo_path?IMG+'w92'+p.logo_path:''}));
+        return { link: gb.link||'', stream: pick('flatrate').concat(pick('free'), pick('ads')), rent: pick('rent') }; })() };
   }
   return m;
 }

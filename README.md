@@ -8,7 +8,7 @@ Static movie chooser on the TCG//SCAN neon theme. Live: https://sfxhewitt.github
   and a UK certificate. `data/overviews.json` holds synopses and loads after first paint.
 - Live TMDB (`tmdb.js`, key in `config.js`): backdrops, cast, trailers and runtimes, live search, and an "All of TMDB" discover mode
   (genre, runtime, rating, era, and moods mapped to genre + keyword combinations).
-- No streaming-service data. Plex (optional, `plex.js`) shows what's on your own server instead; see below.
+- UK where-to-watch (stream / rent) in the film sheet from TMDB `watch/providers` (JustWatch data, same TMDB key). Plex (optional, `plex.js`) shows what's on your own server instead; see below.
 - `data.js`: the original 170-film list, used offline when the catalogue can't load.
 
 ## Build the catalogue (offline, build machine only)
